@@ -1,0 +1,14 @@
+.git
+.worktrees
+.env
+.venv
+venv
+data
+secrets
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+frontend/node_modules
+frontend/dist
+docs/superpowers

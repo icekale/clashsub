@@ -1,0 +1,72 @@
+services:
+  clashsub:
+    build: .
+    image: clashsub:local
+    restart: unless-stopped
+    ports:
+      - "18080:8080"
+    depends_on:
+      subconverter:
+        condition: service_healthy
+    environment:
+      DATA_DIR: /data
+      TZ: Asia/Shanghai
+      AIRPORT_API_BASE_URL: ${AIRPORT_API_BASE_URL:-}
+      AIRPORT_EMAIL_FILE: /run/secrets/airport_email
+      AIRPORT_PASSWORD_FILE: /run/secrets/airport_password
+      UPSTREAM_URL_FILE: /run/secrets/upstream_url
+      ADMIN_USERNAME_FILE: /run/secrets/admin_username
+      ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+      ENCRYPTION_KEY_FILE: /run/secrets/encryption_key
+      TRUSTED_PROXY_CIDRS: ""
+      DOWNLOAD_ALLOWED_CIDRS: ${DOWNLOAD_ALLOWED_CIDRS:-}
+      CONVERTER_BASE_URL: http://subconverter:25500
+      CONVERTER_SOURCE_BASE_URL: http://clashsub:8080
+    secrets:
+      - airport_email
+      - airport_password
+      - upstream_url
+      - admin_username
+      - admin_password
+      - encryption_key
+    volumes:
+      - ./data:/data
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  subconverter:
+    image: aethersailor/subconverter-extended:v1.2.0
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:25500/version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+secrets:
+  airport_email:
+    file: ${AIRPORT_EMAIL_SECRET_FILE:-/dev/null}
+  airport_password:
+    file: ${AIRPORT_PASSWORD_SECRET_FILE:-/dev/null}
+  upstream_url:
+    file: ${UPSTREAM_URL_SECRET_FILE:-./secrets/upstream_url}
+  admin_username:
+    file: ./secrets/admin_username
+  admin_password:
+    file: ./secrets/admin_password
+  encryption_key:
+    file: ${ENCRYPTION_KEY_SECRET_FILE:-./secrets/encryption_key}
