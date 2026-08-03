@@ -320,3 +320,47 @@ async def test_refresh_triggered_hook_runs_after_success(tmp_path):
     result = await refresher.refresh()
     assert result.updated is True
     assert events == ["hook"]
+
+
+@pytest.mark.asyncio
+async def test_auto_refresh_via_refresh_hook_does_not_deadlock(tmp_path):
+    db = _db(tmp_path)
+    store = SettingsStore(db)
+    store.update(
+        RuntimeSettings(
+            health_enabled=True,
+            health_refresh_enabled=True,
+            health_refresh_online_ratio=0.5,
+            health_refresh_cooldown_minutes=10,
+        )
+    )
+    fetched = {"count": 0}
+    payload = (
+        "proxies:\n"
+        "  - {name: one, type: trojan, server: node.example, port: 443, password: pass}\n"
+    )
+
+    def handler(request):
+        fetched["count"] += 1
+        return httpx.Response(200, text=payload)
+
+    refresher = UpstreamRefresher(
+        db,
+        CacheFiles(tmp_path / "cache"),
+        (StaticUrlSource(SecretStr("https://provider.example/sub?token=x")),),
+        transport=httpx.MockTransport(handler),
+        resolver=_async_resolver,
+    )
+    integration = IntegrationService(
+        store,
+        SecretStore(db, _key_file(tmp_path)),
+        StubHealth(HealthSummary(49, 5, time.time())),
+        refresher=refresher,
+    )
+    refresher.on_refreshed = integration.sync_after_refresh
+
+    result = await asyncio.wait_for(refresher.refresh(), timeout=5)
+
+    assert result.updated is True
+    # degraded health triggers one auto refresh through the hook; both complete.
+    assert fetched["count"] == 2

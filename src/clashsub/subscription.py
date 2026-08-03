@@ -180,7 +180,10 @@ class UpstreamRefresher:
 
     async def refresh(self) -> RefreshResult:
         async with self._lock:
-            return await self._refresh_locked(time.time())
+            result = await self._refresh_locked(time.time())
+        if result.updated:
+            await self._notify_refreshed()
+        return result
 
     async def refresh_if_stale(self, max_age_seconds: float) -> RefreshResult | None:
         if self._refreshing:
@@ -194,7 +197,10 @@ class UpstreamRefresher:
             state = self.db.runtime_state()
             if not self._is_stale(state, max_age_seconds):
                 return None
-            return await self._refresh_locked(time.time())
+            result = await self._refresh_locked(time.time())
+        if result is not None and result.updated:
+            await self._notify_refreshed()
+        return result
 
     def _is_stale(self, state, max_age_seconds: float) -> bool:
         now = time.time()
@@ -219,7 +225,6 @@ class UpstreamRefresher:
             for source in self.sources:
                 result = await self._refresh_from_source(source, attempted_at)
                 if result is not None:
-                    await self._notify_refreshed()
                     return result
             self.db.record_refresh_failure("all_sources_failed", attempted_at)
             logger.warning("all subscription sources failed")
@@ -256,35 +261,46 @@ class UpstreamRefresher:
         if not username.strip() or not password:
             return CredentialUpdateResult(False, 0, "invalid_credentials")
         async with self._lock:
+            result = await self._update_protocol_credentials_locked(username, password)
+        if result.ok:
+            await self._notify_refreshed()
+        return result
+
+    async def _update_protocol_credentials_locked(
+        self,
+        username: str,
+        password: str,
+    ) -> CredentialUpdateResult:
+        if not username.strip() or not password:
+            return CredentialUpdateResult(False, 0, "invalid_credentials")
+        try:
             source = next((item for item in self.sources if item.name == "protocol"), None)
             if not isinstance(source, V2BoardSubscriptionSource):
                 return CredentialUpdateResult(False, 0, "not_configured")
-            try:
-                resolved = await source.fetch(credentials=(username, password))
-                self._record_protocol_resolution(resolved)
-                validated, safe_headers = await self._download(resolved)
-                if self.credential_store is None or not self.credential_store.available:
-                    return CredentialUpdateResult(False, 0, "secret_store_unavailable")
-                self.credential_store.put(
-                    "airport_credentials",
-                    json.dumps({"username": username, "password": password}, separators=(",", ":")),
-                )
-                self._commit_success(validated, safe_headers, time.time(), "protocol")
-                await self._notify_refreshed()
-                return CredentialUpdateResult(True, validated.node_count, None)
-            except (
-                V2BoardError,
-                httpx.HTTPError,
-                httpx.InvalidURL,
-                InvalidSubscription,
-                OSError,
-                SecretStoreUnavailable,
-            ) as exc:
-                category = self._error_category(exc)
-                if isinstance(exc, SecretStoreUnavailable):
-                    category = "secret_store_unavailable"
-                self.db.record_protocol_failure(category)
-                return CredentialUpdateResult(False, 0, category)
+            resolved = await source.fetch(credentials=(username, password))
+            self._record_protocol_resolution(resolved)
+            validated, safe_headers = await self._download(resolved)
+            if self.credential_store is None or not self.credential_store.available:
+                return CredentialUpdateResult(False, 0, "secret_store_unavailable")
+            self.credential_store.put(
+                "airport_credentials",
+                json.dumps({"username": username, "password": password}, separators=(",", ":")),
+            )
+            self._commit_success(validated, safe_headers, time.time(), "protocol")
+            return CredentialUpdateResult(True, validated.node_count, None)
+        except (
+            V2BoardError,
+            httpx.HTTPError,
+            httpx.InvalidURL,
+            InvalidSubscription,
+            OSError,
+            SecretStoreUnavailable,
+        ) as exc:
+            category = self._error_category(exc)
+            if isinstance(exc, SecretStoreUnavailable):
+                category = "secret_store_unavailable"
+            self.db.record_protocol_failure(category)
+            return CredentialUpdateResult(False, 0, category)
 
     async def _refresh_from_source(
         self,
