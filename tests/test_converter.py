@@ -79,7 +79,7 @@ proxy-groups:
 """
     service = ConverterService(
         CacheFiles(tmp_path),
-        "http://subconverter:25500",
+        "http://127.0.0.1:25500",
         transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
     )
 
@@ -141,7 +141,7 @@ async def test_surge_removes_managed_header_and_encoded_token_from_cache(tmp_pat
     cache = CacheFiles(tmp_path)
     service = ConverterService(
         cache,
-        "http://subconverter:25500",
+        "http://127.0.0.1:25500",
         transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
     )
 
@@ -160,7 +160,7 @@ async def test_surge_managed_header_uses_public_url_and_cache_hits(tmp_path):
     payload = "[General]\nloglevel = notify\n[Proxy]\nNode = ss, example.test, 443\n"
     service = ConverterService(
         CacheFiles(tmp_path),
-        "http://subconverter:25500",
+        "http://127.0.0.1:25500",
         transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
     )
     share_id = "00000000-0000-0000-0000-000000000014"
@@ -192,7 +192,7 @@ async def test_surge_output_drops_geosite_rules_and_keeps_direct_fallback(tmp_pa
     )
     service = ConverterService(
         CacheFiles(tmp_path),
-        "http://subconverter:25500",
+        "http://127.0.0.1:25500",
         transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
     )
 
@@ -213,7 +213,7 @@ async def test_surge_output_keeps_existing_cn_direct_rule(tmp_path):
     )
     service = ConverterService(
         CacheFiles(tmp_path),
-        "http://subconverter:25500",
+        "http://127.0.0.1:25500",
         transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
     )
 
@@ -235,7 +235,7 @@ async def test_surge_output_fills_empty_ws_path(tmp_path):
     )
     service = ConverterService(
         CacheFiles(tmp_path),
-        "http://subconverter:25500",
+        "http://127.0.0.1:25500",
         transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
     )
 
@@ -261,7 +261,7 @@ async def test_surge_output_drops_non_country_geoip_rules(tmp_path):
     )
     service = ConverterService(
         CacheFiles(tmp_path),
-        "http://subconverter:25500",
+        "http://127.0.0.1:25500",
         transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
     )
 
@@ -307,7 +307,7 @@ async def test_surge_injects_ws_params_and_skip_cert_from_source(tmp_path):
     )
     service = ConverterService(
         cache,
-        "http://subconverter:25500",
+        "http://127.0.0.1:25500",
         transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
     )
 
@@ -329,7 +329,7 @@ async def test_surge_skips_node_injection_when_source_missing(tmp_path):
     )
     service = ConverterService(
         CacheFiles(tmp_path),
-        "http://subconverter:25500",
+        "http://127.0.0.1:25500",
         transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
     )
 
@@ -340,3 +340,80 @@ async def test_surge_skips_node_injection_when_source_missing(tmp_path):
     assert "Node = ss, example.test, 443" in rendered
     assert "ws-path=" not in rendered
     assert "skip-cert-verify" not in rendered
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "header",
+    [
+        'ws-headers="Host:"spoof.example.test""',  # Sub-Store double quoting bug
+        'ws-headers="Host:spoof.example.test"',  # single outer wrapping
+        "ws-headers=Host:spoof.example.test",  # already canonical
+    ],
+)
+async def test_surge_normalizes_ws_headers_quoting(tmp_path, header):
+    payload = (
+        "[General]\nloglevel = notify\n"
+        "[Proxy]\n"
+        f"Node = vmess, example.test, 443, username=abc, ws=true, ws-path=/abc, {header}, udp-relay=true\n"
+        "[Rule]\nFINAL,DIRECT\n"
+    )
+    service = ConverterService(
+        CacheFiles(tmp_path),
+        "http://127.0.0.1:25500",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
+    )
+
+    rendered = await service.render(
+        "00000000-0000-0000-0000-000000000015", "http://clashsub:8080/raw/token", "surge"
+    )
+
+    assert "ws-headers=Host:spoof.example.test" in rendered
+    assert 'ws-headers="' not in rendered
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("format", ["surge", "loon"])
+async def test_converter_rejects_proxy_lines_only_output(tmp_path, format):
+    # Sub-Store returns bare proxy lines without [General]/[Proxy]/[Rule].
+    # Our full-config pipeline must not accept such output as a valid conversion.
+    payload = (
+        "🇭🇰 香港-实验线路 BGP=vmess,node.example.test,32521,username=abc,ws=true,ws-path=/abc,udp-relay=true\n"
+        "🇭🇰 香港-广东专线 BGP 1=trojan,node.example.test,32443,password=xyz,sni=spoof.example.test,skip-cert-verify=true,udp-relay=true\n"
+    )
+    service = ConverterService(
+        CacheFiles(tmp_path),
+        "http://127.0.0.1:25500",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
+    )
+
+    with pytest.raises(RuntimeError, match="unavailable"):
+        await service.render(
+            "00000000-0000-0000-0000-000000000016", "http://clashsub:8080/raw/token", format
+        )
+
+
+@pytest.mark.asyncio
+async def test_surge_output_keeps_complete_config_sections(tmp_path):
+    payload = (
+        "[General]\nloglevel = notify\n"
+        "[Proxy]\n"
+        'Node = vmess, example.test, 443, username=abc, ws=true, ws-path=/abc, ws-headers="Host:"spoof.example.test"", udp-relay=true\n'
+        "[Proxy Group]\nGLOBAL = select, Node\n"
+        "[Rule]\nGEOIP,CN,DIRECT\nFINAL,Proxy\n"
+    )
+    service = ConverterService(
+        CacheFiles(tmp_path),
+        "http://127.0.0.1:25500",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
+    )
+
+    rendered = await service.render(
+        "00000000-0000-0000-0000-000000000017", "http://clashsub:8080/raw/token", "surge"
+    )
+
+    assert rendered.startswith("#!MANAGED-CONFIG http://clashsub:8080/surge/token interval=3600\n")
+    for section in ("[General]", "[Proxy]", "[Proxy Group]", "[Rule]"):
+        assert section in rendered
+    assert "ws-headers=Host:spoof.example.test" in rendered
+    assert 'ws-headers="' not in rendered

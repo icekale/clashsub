@@ -57,6 +57,7 @@ class ConverterService:
                 raise ValueError("converter response has no expected provider")
             if format == "surge":
                 text = self._surge_compatible_proxies(text)
+                text = self._surge_normalize_ws_headers(text)
                 text = self._surge_inject_node_params(text, surge_params or {})
                 text = self._surge_compatible_rules(text)
         else:
@@ -77,6 +78,27 @@ class ConverterService:
                 section = stripped[1:-1].strip().lower()
             elif section == "proxy" and "ws=true" in stripped and "=" in stripped:
                 line = re.sub(r"(?i)ws-path=(\s*)(,|$)", r"ws-path=/\2", line)
+            output.append(line)
+        return "".join(output)
+
+    @staticmethod
+    def _surge_normalize_ws_headers(text: str) -> str:
+        """Strip stray quotes from ws-headers values.
+
+        Sub-Store emits values like ``ws-headers="Host:"example.com""`` (double
+        quoting) for some airport configs; Surge expects ``ws-headers=Host:example.com``.
+        """
+        section = None
+        lines = text.splitlines(keepends=True)
+        output = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("[") and stripped.endswith("]"):
+                section = stripped[1:-1].strip().lower()
+            elif section == "proxy" and "ws-headers=" in line:
+                head, _, tail = line.partition("ws-headers=")
+                value, comma, rest = tail.partition(",")
+                line = f"{head}ws-headers={value.replace('\"', '')}{comma}{rest}"
             output.append(line)
         return "".join(output)
 
