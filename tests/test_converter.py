@@ -121,9 +121,14 @@ async def test_surge_and_loon_accept_general_and_a_proxy_entry(tmp_path, format)
         transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
     )
 
-    assert await service.render(
+    rendered = await service.render(
         "00000000-0000-0000-0000-000000000004", "https://sub.example/raw/token", format
-    ) == payload
+    )
+
+    if format == "surge":
+        assert rendered == "#!MANAGED-CONFIG https://sub.example/surge/token interval=3600\n" + payload
+    else:
+        assert rendered == payload
 
 
 @pytest.mark.asyncio
@@ -145,8 +150,37 @@ async def test_surge_removes_managed_header_and_encoded_token_from_cache(tmp_pat
     )
     stored = cache.read_converter_template("00000000-0000-0000-0000-000000000005", "surge")
 
-    assert "#!MANAGED-CONFIG" not in rendered
+    assert "127.0.0.1:25500" not in rendered
+    assert rendered.startswith("#!MANAGED-CONFIG http://clashsub:8080/surge/plain-secret interval=3600\n")
     assert "plain-secret" not in stored
+
+
+@pytest.mark.asyncio
+async def test_surge_managed_header_uses_public_url_and_cache_hits(tmp_path):
+    payload = "[General]\nloglevel = notify\n[Proxy]\nNode = ss, example.test, 443\n"
+    service = ConverterService(
+        CacheFiles(tmp_path),
+        "http://subconverter:25500",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
+    )
+    share_id = "00000000-0000-0000-0000-000000000014"
+
+    first = await service.render(
+        share_id,
+        "http://clashsub:8080/raw/secret",
+        "surge",
+        public_raw_url="https://sub.example.com/raw/secret",
+    )
+    second = await service.render(
+        share_id,
+        "http://clashsub:8080/raw/secret",
+        "surge",
+        public_raw_url="http://192.168.1.10:18080/raw/secret",
+    )
+
+    assert first.startswith("#!MANAGED-CONFIG https://sub.example.com/surge/secret interval=3600\n")
+    assert second.startswith("#!MANAGED-CONFIG http://192.168.1.10:18080/surge/secret interval=3600\n")
+    assert "http://clashsub:8080" not in first
 
 
 @pytest.mark.asyncio

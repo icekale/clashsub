@@ -225,6 +225,21 @@ class ConverterService:
             RAW_URL_PLACEHOLDER, raw_url
         )
 
+    @staticmethod
+    def _surge_managed_header(output_raw_url: str) -> str:
+        """Managed-config header so Surge offers automatic/manual subscription updates."""
+        if "/raw/" in output_raw_url:
+            base, token = output_raw_url.rsplit("/raw/", 1)
+            managed_url = f"{base}/surge/{token}"
+        else:
+            managed_url = output_raw_url
+        return f"#!MANAGED-CONFIG {managed_url} interval=3600\n"
+
+    def _finalize(self, body: str, format: str, output_raw_url: str) -> str:
+        if format == "surge":
+            body = self._surge_managed_header(output_raw_url) + body
+        return body
+
     async def render(
         self,
         share_id: str,
@@ -240,7 +255,9 @@ class ConverterService:
         try:
             template = self.cache.read_converter_template(share_id, format)
             if time.time() - self.cache.converter_mtime(share_id, format) <= self.cache_ttl:
-                return self._restore_raw_url(template, output_raw_url)
+                return self._finalize(
+                    self._restore_raw_url(template, output_raw_url), format, output_raw_url
+                )
         except OSError:
             template = None
         surge_params = self._surge_node_params(source_digest) if format == "surge" else {}
@@ -255,8 +272,12 @@ class ConverterService:
             response.raise_for_status()
             sanitized = self._validate_and_sanitize(response.text, raw_url, format, surge_params)
             self.cache.write_converter_template(share_id, sanitized, format)
-            return self._restore_raw_url(sanitized, output_raw_url)
+            return self._finalize(
+                self._restore_raw_url(sanitized, output_raw_url), format, output_raw_url
+            )
         except (httpx.HTTPError, ValueError, yaml.YAMLError, OSError) as exc:
             if template is not None:
-                return self._restore_raw_url(template, output_raw_url)
+                return self._finalize(
+                    self._restore_raw_url(template, output_raw_url), format, output_raw_url
+                )
             raise RuntimeError("converter unavailable") from exc
