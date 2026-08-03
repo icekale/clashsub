@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import defaultdict, deque
+from collections import OrderedDict, deque
 from ipaddress import ip_address, ip_network
 
 
@@ -51,11 +51,18 @@ class AccessPolicy:
 
 
 class SlidingWindowLimiter:
-    def __init__(self, limit: int, window_seconds: int):
+    def __init__(self, limit: int, window_seconds: int, max_keys: int = 10000):
         self.limit, self.window = limit, window_seconds
-        self.entries = defaultdict(deque)
+        self.max_keys = max_keys
+        self.entries: OrderedDict[str, deque] = OrderedDict()
 
     def allow(self, key: str, now: float) -> bool:
+        if key not in self.entries:
+            if len(self.entries) >= self.max_keys:
+                self.entries.popitem(last=False)
+            self.entries[key] = deque()
+        else:
+            self.entries.move_to_end(key)
         values = self.entries[key]
         while values and values[0] <= now - self.window:
             values.popleft()

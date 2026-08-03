@@ -168,6 +168,9 @@ def test_clash_ha_filters_recently_failed_nodes(tmp_path):
     )
     with _client(app) as client:
         services = client.app.state.services
+        services.runtime_settings.update(
+            RuntimeSettings(lan_base_url="http://testserver", health_enabled=True)
+        )
         token = _seed_ha_subscription(client)
         services.db.replace_node_health(
             [
@@ -181,6 +184,27 @@ def test_clash_ha_filters_recently_failed_nodes(tmp_path):
         document = yaml.safe_load(response.content)
         names = [proxy["name"] for proxy in document["proxies"]]
         assert names == ["OK Node"]
+
+
+def test_clash_ha_ignores_health_when_disabled(tmp_path):
+    app = create_app(
+        _app_settings(tmp_path),
+        start_scheduler=False,
+        transport=httpx.MockTransport(lambda request: httpx.Response(502)),
+    )
+    with _client(app) as client:
+        services = client.app.state.services
+        token = _seed_ha_subscription(client)
+        services.db.replace_node_health(
+            [
+                ("OK Node", 1, 12.0, time.time()),
+                ("Dead Node", 0, None, time.time()),
+            ]
+        )
+        response = client.get(f"/clash-ha/{token}")
+        assert response.status_code == 200
+        document = yaml.safe_load(response.content)
+        assert len(document["proxies"]) == 2
 
 
 def test_clash_ha_fails_open_without_health_data(tmp_path):

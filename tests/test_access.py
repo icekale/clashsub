@@ -29,6 +29,17 @@ def test_rate_limit_and_redaction_hide_bearers():
     assert "secret" not in text and "Bearer abc" not in text
 
 
+def test_rate_limiter_caps_distinct_keys():
+    limiter = SlidingWindowLimiter(limit=1, window_seconds=60, max_keys=3)
+    assert limiter.allow("k1", now=1)
+    assert limiter.allow("k2", now=1)
+    assert limiter.allow("k3", now=1)
+    # cap reached: the oldest key is evicted so a new key is admitted
+    assert limiter.allow("k4", now=1)
+    assert limiter.allow("k1", now=2)  # k1 was evicted, so it is admitted again
+    assert len(limiter.entries) <= 3
+
+
 def test_redaction_covers_all_share_formats():
     for route in ("raw", "clash", "surge", "loon", "smart"):
         text = redact(f"GET /{route}/abcdefghijklmnopqrstuvwxyz012345 HTTP/1.1")

@@ -88,14 +88,16 @@ async def ha_subscription(token: str, request: Request):
     if not isinstance(proxies, list):
         raise HTTPException(503, "subscription cache unavailable")
 
-    rows = services.db.list_node_health()
-    now = time.time()
-    freshness_window = max(2 * settings.health_interval_minutes * 60, 600)
-    recent_unhealthy = {
-        row["name"]
-        for row in rows
-        if not row["ok"] and now - row["checked_at"] <= freshness_window
-    }
+    recent_unhealthy: set[str] = set()
+    if settings.health_enabled:
+        rows = services.db.list_node_health()
+        now = time.time()
+        freshness_window = max(2 * settings.health_interval_minutes * 60, 600)
+        recent_unhealthy = {
+            row["name"]
+            for row in rows
+            if not row["ok"] and now - row["checked_at"] <= freshness_window
+        }
     filtered = [proxy for proxy in proxies if proxy.get("name") not in recent_unhealthy]
     document["proxies"] = filtered
     body = yaml.safe_dump(document, allow_unicode=True, sort_keys=False)
