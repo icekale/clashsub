@@ -45,9 +45,6 @@ def test_dockerfile_merges_converter_sidecar_into_runtime_image():
     assert "COPY --from=converter /usr/bin/subconverter /usr/bin/subconverter" in dockerfile
     assert "COPY --from=converter /usr/lib/libmihomo.so /usr/lib/libmihomo.so" in dockerfile
     assert "COPY --from=converter /base /base" in dockerfile
-    assert "COPY --from=converter /lib /converter-lib" in dockerfile
-    assert "converter-lib/${LIB_ARCH}" in dockerfile
-    assert "TARGETARCH" in dockerfile
     assert "ENTRYPOINT" in dockerfile
     assert "docker-entrypoint.sh" in dockerfile
 

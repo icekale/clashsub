@@ -31,18 +31,6 @@ COPY --from=converter /usr/bin/subconverter /usr/bin/subconverter
 COPY --from=converter /usr/lib/libmihomo.so /usr/lib/libmihomo.so
 COPY --from=converter /base /base
 COPY --from=converter /usr/local/bin/start-subconverter /usr/local/bin/start-subconverter
-COPY --from=converter /lib /converter-lib
-ARG TARGETARCH
-RUN set -eux; \
-    ARCH="${TARGETARCH:-$(uname -m)}"; \
-    case "$ARCH" in \
-      amd64|x86_64) LIB_ARCH="x86_64-linux-gnu" ;; \
-      arm64|aarch64) LIB_ARCH="aarch64-linux-gnu" ;; \
-      *) echo "unsupported arch: $ARCH" >&2; exit 1 ;; \
-    esac; \
-    mkdir -p "/lib/${LIB_ARCH}"; \
-    cp -a "/converter-lib/${LIB_ARCH}/." "/lib/${LIB_ARCH}/"; \
-    rm -rf /converter-lib
 RUN chmod +x /usr/local/bin/start-subconverter \
     && mkdir -p /data \
     && chown -R clashsub:clashsub /data /app
