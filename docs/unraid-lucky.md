@@ -113,7 +113,7 @@ WebUI 中关闭公网模式只会让应用恢复 LAN 来源限制，不会删除
 ## 6. 验收清单
 
 - `docker compose ps` 显示容器 healthy；
-- `subconverter` 只在 Compose 内部网络监听 `25500`，宿主机不发布该端口；
+- 转换服务与主应用同容器，仅监听回环 `127.0.0.1:25500`，宿主机不发布该端口；
 - 局域网可访问 `/app/`，LAN 模式下公网请求不可用；
 - Lucky 对完整主机转发，HTTPS 生效；
 - WebUI 公网模式启用后，外部网络可登录并使用有效分享链接；
@@ -122,5 +122,5 @@ WebUI 中关闭公网模式只会让应用恢复 LAN 来源限制，不会删除
 - `TRUSTED_PROXY_CIDRS` 只包含实际 Lucky 来源网络。
 - WebUI 机场协议状态完整，手动刷新来源为 `protocol` 且节点数为 49；
 - 超过按需刷新间隔后再请求分享链接，事件日志出现新的 `refresh succeeded`，仍为 49 节点；
-- 原始分享以及 Clash、Surge、Loon 和智能分享均保持 ClashSub 自身域名，由本地 `subconverter` 转换；
+- 原始分享以及 Clash、Surge、Loon 和智能分享均保持 ClashSub 自身域名，由镜像内置的转换服务转换；
 - 容器日志和 `/data` 中不包含机场密码、`auth_data` 或完整订阅 URL。

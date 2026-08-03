@@ -21,11 +21,17 @@ check() {
 
 statuses="$(docker compose -f "$ROOT/compose.yaml" ps --format '{{.Name}} {{.Status}}' 2>&1 || true)"
 if printf '%s' "$statuses" | grep -q 'healthy' \
-  && printf '%s' "$statuses" | grep -q 'clashsub' \
-  && printf '%s' "$statuses" | grep -q 'subconverter'; then
+  && printf '%s' "$statuses" | grep -q 'clashsub'; then
   check "compose containers" 1 "$(printf '%s' "$statuses" | tr '\n' ';')"
 else
   check "compose containers" 0 "$(printf '%s' "$statuses" | tr '\n' ';')"
+fi
+
+if docker compose -f "$ROOT/compose.yaml" exec -T clashsub python -c \
+  "import urllib.request; urllib.request.urlopen('http://127.0.0.1:25500/version', timeout=5)" >/dev/null 2>&1; then
+  check "converter sidecar" 1 "127.0.0.1:25500"
+else
+  check "converter sidecar" 0 "127.0.0.1:25500"
 fi
 
 health_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$BASE/healthz" || true)"

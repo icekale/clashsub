@@ -120,7 +120,7 @@ class Settings:
     airport_password: SecretStr | None = field(default=None, repr=False)
     trusted_proxy_cidrs: tuple[str, ...] = ()
     download_allowed_cidrs: tuple[str, ...] = ()
-    converter_base_url: str = "http://subconverter:25500"
+    converter_base_url: str = "http://127.0.0.1:25500"
     converter_source_base_url: str = ""
     max_response_bytes: int = 8 * 1024 * 1024
     encryption_key_file: Path = Path("/run/secrets/encryption_key")
@@ -153,7 +153,7 @@ class Settings:
             airport_password=airport_password,
             trusted_proxy_cidrs=_cidrs("TRUSTED_PROXY_CIDRS"),
             download_allowed_cidrs=_cidrs("DOWNLOAD_ALLOWED_CIDRS"),
-            converter_base_url=_service_url("CONVERTER_BASE_URL", "http://subconverter:25500"),
+            converter_base_url=_service_url("CONVERTER_BASE_URL", "http://127.0.0.1:25500"),
             converter_source_base_url=_service_url("CONVERTER_SOURCE_BASE_URL"),
             encryption_key_file=Path(os.getenv("ENCRYPTION_KEY_FILE", "/run/secrets/encryption_key")),
         )

@@ -76,8 +76,8 @@ chmod 700 data
 | `ENCRYPTION_KEY_SECRET_FILE` | `./secrets/encryption_key` | 主密钥 Secret 路径 |
 | `TRUSTED_PROXY_CIDRS` | 空 | 反向代理的精确 CIDR，用于信任转发头 |
 | `DOWNLOAD_ALLOWED_CIDRS` | 空 | OpenClash Fake-IP 环境设为 `198.18.0.0/15` |
-| `CONVERTER_BASE_URL` | `http://subconverter:25500` | 本地转换服务地址 |
-| `CONVERTER_SOURCE_BASE_URL` | `http://clashsub:8080` | 转换服务回源地址 |
+| `CONVERTER_BASE_URL` | `http://127.0.0.1:25500` | 转换服务地址（与主应用同容器） |
+| `CONVERTER_SOURCE_BASE_URL` | `http://127.0.0.1:8080` | 转换服务回源地址 |
 
 ### 4. 构建并启动
 
@@ -107,7 +107,8 @@ Unraid 部署要点（appdata 目录、权限、命名卷）以及通过 Lucky �
 - `/surge/<token>`、`/loon/<token>`：对应格式的转换订阅；
 - `/clash-ha/<token>`：仅包含最近健康检查通过的节点的 Clash 配置。
 
-转换订阅由内置的 SubConverter-Extended 容器生成，不需要外部在线服务。
+转换订阅由镜像内置的 SubConverter-Extended 生成，与主应用运行在同一个容器内
+（仅监听回环 `127.0.0.1:25500`），不需要外部在线服务。
 
 ### OpenClash 联动
 

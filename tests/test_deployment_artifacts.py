@@ -20,26 +20,46 @@ def test_compose_allows_fallback_only_without_airport_secret_files():
     assert secrets["upstream_url"]["file"] == "${UPSTREAM_URL_SECRET_FILE:-./secrets/upstream_url}"
 
 
-def test_compose_runs_a_pinned_internal_converter_sidecar():
+def test_compose_runs_converter_inside_the_single_container():
     compose = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
 
-    converter = compose["services"]["subconverter"]
-    assert converter["image"] == "aethersailor/subconverter-extended:v1.2.0"
-    assert "ports" not in converter
-    assert converter["cap_drop"] == ["ALL"]
-    assert converter["security_opt"] == ["no-new-privileges:true"]
-    assert converter["healthcheck"]["test"] == [
-        "CMD",
-        "wget",
-        "-q",
-        "--spider",
-        "http://127.0.0.1:25500/version",
-    ]
-
+    assert "subconverter" not in compose["services"]
     clashsub = compose["services"]["clashsub"]
-    assert clashsub["environment"]["CONVERTER_BASE_URL"] == "http://subconverter:25500"
-    assert clashsub["environment"]["CONVERTER_SOURCE_BASE_URL"] == "http://clashsub:8080"
-    assert clashsub["depends_on"]["subconverter"]["condition"] == "service_healthy"
+    assert "depends_on" not in clashsub
+    assert clashsub["environment"]["CONVERTER_BASE_URL"] == "http://127.0.0.1:25500"
+    assert clashsub["environment"]["CONVERTER_SOURCE_BASE_URL"] == "http://127.0.0.1:8080"
+    assert clashsub["cap_drop"] == ["ALL"]
+    assert clashsub["security_opt"] == ["no-new-privileges:true"]
+    assert clashsub["read_only"] is True
+
+    healthcheck = " ".join(clashsub["healthcheck"]["test"])
+    assert "8080/healthz" in healthcheck
+    assert "25500/version" in healthcheck
+
+
+def test_dockerfile_merges_converter_sidecar_into_runtime_image():
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "FROM aethersailor/subconverter-extended:v1.2.0 AS converter" in dockerfile
+    assert "FROM python:3.13-slim-trixie AS runtime" in dockerfile
+    assert "COPY --from=converter /usr/bin/subconverter /usr/bin/subconverter" in dockerfile
+    assert "COPY --from=converter /usr/lib/libmihomo.so /usr/lib/libmihomo.so" in dockerfile
+    assert "COPY --from=converter /base /base" in dockerfile
+    assert "COPY --from=converter /lib /converter-lib" in dockerfile
+    assert "converter-lib/${LIB_ARCH}" in dockerfile
+    assert "TARGETARCH" in dockerfile
+    assert "ENTRYPOINT" in dockerfile
+    assert "docker-entrypoint.sh" in dockerfile
+
+
+def test_entrypoint_starts_sidecar_then_execs_main_command():
+    entrypoint = (ROOT / "docker-entrypoint.sh").read_text(encoding="utf-8")
+
+    assert "start-subconverter" in entrypoint
+    assert "cp -a /base/. /tmp/subconverter/" in entrypoint
+    assert "PREF_PATH=/tmp/subconverter/pref.toml" in entrypoint
+    assert "127.0.0.1:25500/version" in entrypoint
+    assert 'exec "$@"' in entrypoint
 
 
 def test_readme_prompts_for_secret_values_without_literal_password_examples():

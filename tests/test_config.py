@@ -60,13 +60,13 @@ def test_converter_urls_are_read_from_environment(
 ):
     _set_admin_secrets(monkeypatch, tmp_path)
     monkeypatch.setenv("UPSTREAM_URL_FILE", _write(tmp_path / "upstream", "https://provider.invalid/sub"))
-    monkeypatch.setenv("CONVERTER_BASE_URL", "http://subconverter:25500")
-    monkeypatch.setenv("CONVERTER_SOURCE_BASE_URL", "http://clashsub:8080")
+    monkeypatch.setenv("CONVERTER_BASE_URL", "http://127.0.0.1:25500")
+    monkeypatch.setenv("CONVERTER_SOURCE_BASE_URL", "http://127.0.0.1:8080")
 
     settings = Settings.from_env()
 
-    assert settings.converter_base_url == "http://subconverter:25500"
-    assert settings.converter_source_base_url == "http://clashsub:8080"
+    assert settings.converter_base_url == "http://127.0.0.1:25500"
+    assert settings.converter_source_base_url == "http://127.0.0.1:8080"
 
 
 def test_converter_defaults_to_local_sidecar(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -74,7 +74,7 @@ def test_converter_defaults_to_local_sidecar(tmp_path: Path, monkeypatch: pytest
     monkeypatch.setenv("UPSTREAM_URL_FILE", _write(tmp_path / "upstream", "https://provider.invalid/sub"))
     monkeypatch.delenv("CONVERTER_BASE_URL", raising=False)
 
-    assert Settings.from_env().converter_base_url == "http://subconverter:25500"
+    assert Settings.from_env().converter_base_url == "http://127.0.0.1:25500"
 
 
 @pytest.mark.parametrize(
