@@ -92,7 +92,7 @@ async def ha_subscription(token: str, request: Request):
     if settings.health_enabled:
         rows = services.db.list_node_health()
         now = time.time()
-        freshness_window = max(2 * settings.health_interval_minutes * 60, 600)
+        freshness_window = max(2 * settings.health_interval_seconds, 120)
         recent_unhealthy = {
             row["name"]
             for row in rows

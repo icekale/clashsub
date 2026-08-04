@@ -63,7 +63,7 @@ def test_integration_settings_defaults(tmp_path: Path):
     assert settings.openclash_api_url == ""
     assert settings.openclash_provider == ""
     assert settings.health_enabled is False
-    assert settings.health_interval_minutes == 10
+    assert settings.health_interval_seconds == 600
     assert settings.health_timeout_seconds == 5
 
 
@@ -94,9 +94,9 @@ def test_openclash_url_rejects_unsafe_origins():
 
 def test_health_settings_validation():
     with pytest.raises(ValueError, match="health check interval"):
-        RuntimeSettings(health_interval_minutes=0).validated()
+        RuntimeSettings(health_interval_seconds=29).validated()
     with pytest.raises(ValueError, match="health check interval"):
-        RuntimeSettings(health_interval_minutes=1441).validated()
+        RuntimeSettings(health_interval_seconds=86401).validated()
     with pytest.raises(ValueError, match="health check timeout"):
         RuntimeSettings(health_timeout_seconds=0).validated()
     with pytest.raises(ValueError, match="health check timeout"):
@@ -148,15 +148,27 @@ def test_integration_settings_persist_roundtrip(tmp_path: Path):
             openclash_api_url="http://192.168.1.1:9090",
             openclash_provider="Provider_988009",
             health_enabled=True,
-            health_interval_minutes=15,
+            health_interval_seconds=900,
             health_timeout_seconds=8,
         )
     )
     loaded = store.get()
     assert loaded.openclash_enabled is True
     assert loaded.openclash_provider == "Provider_988009"
-    assert loaded.health_interval_minutes == 15
+    assert loaded.health_interval_seconds == 900
     assert loaded.health_timeout_seconds == 8
+
+
+def test_legacy_health_interval_minutes_migrates_to_seconds(tmp_path: Path):
+    db = Database(tmp_path / "state.db")
+    db.initialize()
+    store = SettingsStore(db)
+    with db.transaction() as conn:
+        conn.execute(
+            "INSERT INTO app_settings(key, value) VALUES ('health_interval_minutes', '15')"
+        )
+
+    assert store.get().health_interval_seconds == 900
 
 
 def test_node_health_roundtrip(tmp_path: Path):

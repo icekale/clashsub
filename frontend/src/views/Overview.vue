@@ -234,7 +234,7 @@ onMounted(load)
           </div>
           <div>
             <dt>检查间隔</dt>
-            <dd>{{ health.enabled ? `${health.interval_minutes} 分钟` : '未开启' }}</dd>
+            <dd>{{ health.enabled ? `${health.interval_seconds} 秒` : '未开启' }}</dd>
           </div>
         </dl>
 

@@ -48,7 +48,7 @@ const loadedSettings = {
   openclash_api_url: '',
   openclash_provider: '',
   health_enabled: false,
-  health_interval_minutes: 10,
+  health_interval_seconds: 600,
   health_timeout_seconds: 5,
   health_refresh_enabled: false,
   health_refresh_online_ratio: 0.5,

@@ -51,7 +51,7 @@ describe('Overview', () => {
       .mockResolvedValueOnce(loadedOverview)
       .mockResolvedValueOnce({
         enabled: true,
-        interval_minutes: 10,
+        interval_seconds: 600,
         timeout_seconds: 5,
         checked_at: 1_800_000_000,
         total: 3,
@@ -82,7 +82,7 @@ describe('Overview', () => {
       .mockResolvedValueOnce(loadedOverview)
       .mockResolvedValueOnce({
         enabled: true,
-        interval_minutes: 10,
+        interval_seconds: 600,
         timeout_seconds: 5,
         checked_at: 1_800_000_000,
         total: 2,
@@ -107,7 +107,7 @@ describe('Overview', () => {
       .mockResolvedValueOnce(loadedOverview)
       .mockResolvedValueOnce({
         enabled: false,
-        interval_minutes: 10,
+        interval_seconds: 600,
         timeout_seconds: 5,
         checked_at: null,
         total: 0,

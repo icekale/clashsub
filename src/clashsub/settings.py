@@ -16,7 +16,7 @@ class RuntimeSettings:
     openclash_api_url: str = ""
     openclash_provider: str = ""
     health_enabled: bool = False
-    health_interval_minutes: int = 10
+    health_interval_seconds: int = 600
     health_timeout_seconds: int = 5
     health_refresh_enabled: bool = False
     health_refresh_online_ratio: float = 0.5
@@ -40,8 +40,8 @@ class RuntimeSettings:
             if not self.openclash_provider.strip():
                 raise ValueError("OpenClash provider name is required")
             object.__setattr__(self, "openclash_api_url", api_url)
-        if not 1 <= self.health_interval_minutes <= 1440:
-            raise ValueError("health check interval must be between 1 and 1440 minutes")
+        if not 30 <= self.health_interval_seconds <= 86400:
+            raise ValueError("health check interval must be between 30 and 86400 seconds")
         if not 1 <= self.health_timeout_seconds <= 30:
             raise ValueError("health check timeout must be between 1 and 30 seconds")
         if not 0.1 <= self.health_refresh_online_ratio <= 1.0:
@@ -71,7 +71,11 @@ class SettingsStore:
             openclash_api_url=values.get("openclash_api_url", ""),
             openclash_provider=values.get("openclash_provider", ""),
             health_enabled=values.get("health_enabled", "false") == "true",
-            health_interval_minutes=int(values.get("health_interval_minutes", "10")),
+            health_interval_seconds=(
+                int(values["health_interval_seconds"])
+                if values.get("health_interval_seconds")
+                else int(values.get("health_interval_minutes", "10")) * 60
+            ),
             health_timeout_seconds=int(values.get("health_timeout_seconds", "5")),
             health_refresh_enabled=values.get("health_refresh_enabled", "false") == "true",
             health_refresh_online_ratio=float(values.get("health_refresh_online_ratio", "0.5")),

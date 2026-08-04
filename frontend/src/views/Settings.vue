@@ -43,7 +43,7 @@ const form = reactive({
   openclash_api_url: '',
   openclash_provider: '',
   health_enabled: false,
-  health_interval_minutes: 10,
+  health_interval_seconds: 600,
   health_timeout_seconds: 5,
   health_refresh_enabled: false,
   health_refresh_online_ratio: 0.5,
@@ -74,7 +74,7 @@ function settingsFields(payload) {
     openclash_api_url: payload.openclash_api_url || '',
     openclash_provider: payload.openclash_provider || '',
     health_enabled: Boolean(payload.health_enabled),
-    health_interval_minutes: payload.health_interval_minutes || 10,
+    health_interval_seconds: payload.health_interval_seconds || 600,
     health_timeout_seconds: payload.health_timeout_seconds || 5,
     health_refresh_enabled: Boolean(payload.health_refresh_enabled),
     health_refresh_online_ratio: payload.health_refresh_online_ratio ?? 0.5,
@@ -606,14 +606,14 @@ onMounted(load)
 
       <n-form :model="form" label-placement="top" class="settings-form-grid">
         <n-form-item
-          label="检查间隔（分钟）"
+          label="检查间隔（秒）"
           :label-props="{ for: 'settings-health-interval' }"
         >
           <n-input-number
-            v-model:value="form.health_interval_minutes"
+            v-model:value="form.health_interval_seconds"
             :input-props="{ id: 'settings-health-interval' }"
-            :min="1"
-            :max="1440"
+            :min="30"
+            :max="86400"
           />
         </n-form-item>
         <n-form-item

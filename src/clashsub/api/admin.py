@@ -43,7 +43,7 @@ class RuntimeSettingsRequest(BaseModel):
     openclash_api_url: str = Field(default="", max_length=2048)
     openclash_provider: str = Field(default="", max_length=256)
     health_enabled: bool = False
-    health_interval_minutes: int = Field(default=10, ge=1, le=1440)
+    health_interval_seconds: int = Field(default=600, ge=30, le=86400)
     health_timeout_seconds: int = Field(default=5, ge=1, le=30)
     health_refresh_enabled: bool = False
     health_refresh_online_ratio: float = Field(default=0.5, ge=0.1, le=1.0)
@@ -223,7 +223,7 @@ def update_settings(payload: RuntimeSettingsRequest, request: Request):
         openclash_api_url=payload.openclash_api_url,
         openclash_provider=payload.openclash_provider,
         health_enabled=payload.health_enabled,
-        health_interval_minutes=payload.health_interval_minutes,
+        health_interval_seconds=payload.health_interval_seconds,
         health_timeout_seconds=payload.health_timeout_seconds,
         health_refresh_enabled=payload.health_refresh_enabled,
         health_refresh_online_ratio=payload.health_refresh_online_ratio,
@@ -235,7 +235,7 @@ def update_settings(payload: RuntimeSettingsRequest, request: Request):
         raise HTTPException(400, str(exc)) from exc
     if current.refresh_interval_minutes != updated.refresh_interval_minutes and services.scheduler is not None:
         services.scheduler.reschedule()
-    if current.health_interval_minutes != updated.health_interval_minutes and getattr(
+    if current.health_interval_seconds != updated.health_interval_seconds and getattr(
         services, "health_scheduler", None
     ) is not None:
         services.health_scheduler.reschedule()
@@ -396,7 +396,7 @@ def health_overview(request: Request):
     ]
     return {
         "enabled": settings.health_enabled,
-        "interval_minutes": settings.health_interval_minutes,
+        "interval_seconds": settings.health_interval_seconds,
         "timeout_seconds": settings.health_timeout_seconds,
         "checked_at": max((row["checked_at"] for row in rows), default=None),
         "total": len(nodes),

@@ -71,7 +71,7 @@ def test_settings_roundtrip_includes_integration_fields(tmp_path):
             "openclash_api_url": "http://192.168.1.1:9090",
             "openclash_provider": "Provider_988009",
             "health_enabled": True,
-            "health_interval_minutes": 15,
+            "health_interval_seconds": 900,
             "health_timeout_seconds": 8,
         }
         response = client.put("/api/admin/settings", headers=headers, json=payload)
@@ -79,7 +79,7 @@ def test_settings_roundtrip_includes_integration_fields(tmp_path):
         saved = client.get("/api/admin/settings").json()
         assert saved["openclash_enabled"] is True
         assert saved["openclash_provider"] == "Provider_988009"
-        assert saved["health_interval_minutes"] == 15
+        assert saved["health_interval_seconds"] == 900
         assert saved["health_timeout_seconds"] == 8
 
         invalid = client.put(
@@ -186,6 +186,37 @@ def test_clash_ha_filters_recently_failed_nodes(tmp_path):
         assert names == ["OK Node"]
 
 
+def test_clash_ha_uses_short_freshness_window_for_frequent_checks(tmp_path):
+    app = create_app(
+        _app_settings(tmp_path),
+        start_scheduler=False,
+        transport=httpx.MockTransport(lambda request: httpx.Response(502)),
+    )
+    with _client(app) as client:
+        services = client.app.state.services
+        services.runtime_settings.update(
+            RuntimeSettings(
+                lan_base_url="http://testserver",
+                health_enabled=True,
+                health_interval_seconds=30,
+            )
+        )
+        token = _seed_ha_subscription(client)
+        # A failure recorded 5 minutes ago is stale at a 30s interval,
+        # so the node must be allowed back into the HA subscription.
+        services.db.replace_node_health(
+            [
+                ("OK Node", 1, 12.0, time.time()),
+                ("Dead Node", 0, None, time.time() - 300),
+            ]
+        )
+        response = client.get(f"/clash-ha/{token}")
+        assert response.status_code == 200
+        document = yaml.safe_load(response.content)
+        names = [proxy["name"] for proxy in document["proxies"]]
+        assert names == ["OK Node", "Dead Node"]
+
+
 def test_clash_ha_ignores_health_when_disabled(tmp_path):
     app = create_app(
         _app_settings(tmp_path),
@@ -259,7 +290,7 @@ def test_health_overview_and_manual_check(tmp_path):
             json={
                 **client.get("/api/admin/settings").json(),
                 "health_enabled": True,
-                "health_interval_minutes": 5,
+                "health_interval_seconds": 300,
                 "health_timeout_seconds": 2,
             },
         )
