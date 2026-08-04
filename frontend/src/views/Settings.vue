@@ -48,6 +48,10 @@ const form = reactive({
   health_refresh_enabled: false,
   health_refresh_online_ratio: 0.5,
   health_refresh_cooldown_minutes: 10,
+  health_night_enabled: false,
+  health_night_interval_seconds: 600,
+  health_night_start_hour: 0,
+  health_night_end_hour: 8,
 })
 const original = reactive({ ...form })
 const credentials = reactive({
@@ -79,6 +83,10 @@ function settingsFields(payload) {
     health_refresh_enabled: Boolean(payload.health_refresh_enabled),
     health_refresh_online_ratio: payload.health_refresh_online_ratio ?? 0.5,
     health_refresh_cooldown_minutes: payload.health_refresh_cooldown_minutes || 10,
+    health_night_enabled: Boolean(payload.health_night_enabled),
+    health_night_interval_seconds: payload.health_night_interval_seconds || 600,
+    health_night_start_hour: payload.health_night_start_hour ?? 0,
+    health_night_end_hour: payload.health_night_end_hour ?? 8,
   }
 }
 
@@ -604,6 +612,14 @@ onMounted(load)
         <n-switch v-model:value="form.health_refresh_enabled" aria-label="不可用时自动刷新缓存" />
       </div>
 
+      <div class="settings-switch-row">
+        <div>
+          <strong>夜间降低检查频率</strong>
+          <span>在指定时间段内使用较长的检查间隔，减少夜间对节点服务器的探测频率。</span>
+        </div>
+        <n-switch v-model:value="form.health_night_enabled" aria-label="夜间降低检查频率" />
+      </div>
+
       <n-form :model="form" label-placement="top" class="settings-form-grid">
         <n-form-item
           label="检查间隔（秒）"
@@ -614,6 +630,42 @@ onMounted(load)
             :input-props="{ id: 'settings-health-interval' }"
             :min="30"
             :max="86400"
+          />
+        </n-form-item>
+        <n-form-item
+          label="夜间检查间隔（秒）"
+          :label-props="{ for: 'settings-health-night-interval' }"
+        >
+          <n-input-number
+            v-model:value="form.health_night_interval_seconds"
+            :input-props="{ id: 'settings-health-night-interval' }"
+            :min="30"
+            :max="86400"
+            :disabled="!form.health_night_enabled"
+          />
+        </n-form-item>
+        <n-form-item
+          label="夜间开始（小时）"
+          :label-props="{ for: 'settings-health-night-start' }"
+        >
+          <n-input-number
+            v-model:value="form.health_night_start_hour"
+            :input-props="{ id: 'settings-health-night-start' }"
+            :min="0"
+            :max="23"
+            :disabled="!form.health_night_enabled"
+          />
+        </n-form-item>
+        <n-form-item
+          label="夜间结束（小时）"
+          :label-props="{ for: 'settings-health-night-end' }"
+        >
+          <n-input-number
+            v-model:value="form.health_night_end_hour"
+            :input-props="{ id: 'settings-health-night-end' }"
+            :min="0"
+            :max="23"
+            :disabled="!form.health_night_enabled"
           />
         </n-form-item>
         <n-form-item

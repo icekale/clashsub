@@ -21,6 +21,10 @@ class RuntimeSettings:
     health_refresh_enabled: bool = False
     health_refresh_online_ratio: float = 0.5
     health_refresh_cooldown_minutes: int = 10
+    health_night_enabled: bool = False
+    health_night_interval_seconds: int = 600
+    health_night_start_hour: int = 0
+    health_night_end_hour: int = 8
 
     def validated(self):
         if not 1 <= self.refresh_interval_minutes <= 1440:
@@ -48,7 +52,24 @@ class RuntimeSettings:
             raise ValueError("health refresh online ratio must be between 0.1 and 1.0")
         if not 1 <= self.health_refresh_cooldown_minutes <= 1440:
             raise ValueError("health refresh cooldown must be between 1 and 1440 minutes")
+        if not 30 <= self.health_night_interval_seconds <= 86400:
+            raise ValueError("night health interval must be between 30 and 86400 seconds")
+        if not 0 <= self.health_night_start_hour <= 23 or not 0 <= self.health_night_end_hour <= 23:
+            raise ValueError("night window hours must be between 0 and 23")
+        if self.health_night_start_hour == self.health_night_end_hour:
+            raise ValueError("night window start and end hours must differ")
         return self
+
+    def is_night(self, hour: int) -> bool:
+        if not self.health_night_enabled:
+            return False
+        start, end = self.health_night_start_hour, self.health_night_end_hour
+        if start < end:
+            return start <= hour < end
+        return hour >= start or hour < end
+
+    def effective_health_interval(self, hour: int) -> int:
+        return self.health_night_interval_seconds if self.is_night(hour) else self.health_interval_seconds
 
     def active_base_url(self) -> str:
         return (self.public_base_url if self.access_mode == "public" else self.lan_base_url).rstrip("/")
@@ -80,6 +101,10 @@ class SettingsStore:
             health_refresh_enabled=values.get("health_refresh_enabled", "false") == "true",
             health_refresh_online_ratio=float(values.get("health_refresh_online_ratio", "0.5")),
             health_refresh_cooldown_minutes=int(values.get("health_refresh_cooldown_minutes", "10")),
+            health_night_enabled=values.get("health_night_enabled", "false") == "true",
+            health_night_interval_seconds=int(values.get("health_night_interval_seconds", "600")),
+            health_night_start_hour=int(values.get("health_night_start_hour", "0")),
+            health_night_end_hour=int(values.get("health_night_end_hour", "8")),
         ).validated()
 
     def update(self, settings: RuntimeSettings) -> RuntimeSettings:

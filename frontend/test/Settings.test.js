@@ -53,6 +53,10 @@ const loadedSettings = {
   health_refresh_enabled: false,
   health_refresh_online_ratio: 0.5,
   health_refresh_cooldown_minutes: 10,
+  health_night_enabled: false,
+  health_night_interval_seconds: 600,
+  health_night_start_hour: 0,
+  health_night_end_hour: 8,
 }
 
 const loadedUpstreamStatus = {

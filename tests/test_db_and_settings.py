@@ -103,6 +103,57 @@ def test_health_settings_validation():
         RuntimeSettings(health_timeout_seconds=31).validated()
 
 
+def test_night_health_settings_validation():
+    with pytest.raises(ValueError, match="night health interval"):
+        RuntimeSettings(health_night_enabled=True, health_night_interval_seconds=29).validated()
+    with pytest.raises(ValueError, match="night window hours"):
+        RuntimeSettings(health_night_enabled=True, health_night_start_hour=24).validated()
+    with pytest.raises(ValueError, match="night window start and end hours must differ"):
+        RuntimeSettings(
+            health_night_enabled=True,
+            health_night_start_hour=0,
+            health_night_end_hour=0,
+        ).validated()
+
+
+def test_effective_health_interval_uses_night_window():
+    settings = RuntimeSettings(
+        health_interval_seconds=60,
+        health_night_enabled=True,
+        health_night_interval_seconds=600,
+        health_night_start_hour=0,
+        health_night_end_hour=8,
+    )
+    assert settings.effective_health_interval(0) == 600
+    assert settings.effective_health_interval(3) == 600
+    assert settings.effective_health_interval(8) == 60
+    assert settings.effective_health_interval(23) == 60
+
+
+def test_effective_health_interval_supports_wraparound_window():
+    settings = RuntimeSettings(
+        health_interval_seconds=60,
+        health_night_enabled=True,
+        health_night_interval_seconds=300,
+        health_night_start_hour=22,
+        health_night_end_hour=6,
+    )
+    assert settings.effective_health_interval(23) == 300
+    assert settings.effective_health_interval(0) == 300
+    assert settings.effective_health_interval(5) == 300
+    assert settings.effective_health_interval(6) == 60
+    assert settings.effective_health_interval(12) == 60
+
+
+def test_effective_health_interval_ignored_when_disabled():
+    settings = RuntimeSettings(
+        health_interval_seconds=60,
+        health_night_enabled=False,
+        health_night_interval_seconds=600,
+    )
+    assert settings.effective_health_interval(3) == 60
+
+
 def test_health_refresh_settings_defaults(tmp_path: Path):
     db = Database(tmp_path / "state.db")
     db.initialize()
@@ -150,6 +201,10 @@ def test_integration_settings_persist_roundtrip(tmp_path: Path):
             health_enabled=True,
             health_interval_seconds=900,
             health_timeout_seconds=8,
+            health_night_enabled=True,
+            health_night_interval_seconds=600,
+            health_night_start_hour=22,
+            health_night_end_hour=6,
         )
     )
     loaded = store.get()
@@ -157,6 +212,10 @@ def test_integration_settings_persist_roundtrip(tmp_path: Path):
     assert loaded.openclash_provider == "Provider_988009"
     assert loaded.health_interval_seconds == 900
     assert loaded.health_timeout_seconds == 8
+    assert loaded.health_night_enabled is True
+    assert loaded.health_night_interval_seconds == 600
+    assert loaded.health_night_start_hour == 22
+    assert loaded.health_night_end_hour == 6
 
 
 def test_legacy_health_interval_minutes_migrates_to_seconds(tmp_path: Path):

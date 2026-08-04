@@ -234,7 +234,13 @@ onMounted(load)
           </div>
           <div>
             <dt>检查间隔</dt>
-            <dd>{{ health.enabled ? `${health.interval_seconds} 秒` : '未开启' }}</dd>
+            <dd>
+              {{ health.enabled ? `${health.interval_seconds} 秒` : '未开启' }}
+              <template v-if="health.enabled && health.night_enabled">
+                （夜间 {{ health.night_start_hour }}:00–{{ health.night_end_hour }}:00 为
+                {{ health.night_interval_seconds }} 秒）
+              </template>
+            </dd>
           </div>
         </dl>
 

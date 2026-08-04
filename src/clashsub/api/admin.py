@@ -48,6 +48,10 @@ class RuntimeSettingsRequest(BaseModel):
     health_refresh_enabled: bool = False
     health_refresh_online_ratio: float = Field(default=0.5, ge=0.1, le=1.0)
     health_refresh_cooldown_minutes: int = Field(default=10, ge=1, le=1440)
+    health_night_enabled: bool = False
+    health_night_interval_seconds: int = Field(default=600, ge=30, le=86400)
+    health_night_start_hour: int = Field(default=0, ge=0, le=23)
+    health_night_end_hour: int = Field(default=8, ge=0, le=23)
     public_acknowledged: bool = False
 
 
@@ -228,6 +232,10 @@ def update_settings(payload: RuntimeSettingsRequest, request: Request):
         health_refresh_enabled=payload.health_refresh_enabled,
         health_refresh_online_ratio=payload.health_refresh_online_ratio,
         health_refresh_cooldown_minutes=payload.health_refresh_cooldown_minutes,
+        health_night_enabled=payload.health_night_enabled,
+        health_night_interval_seconds=payload.health_night_interval_seconds,
+        health_night_start_hour=payload.health_night_start_hour,
+        health_night_end_hour=payload.health_night_end_hour,
     )
     try:
         services.runtime_settings.update(updated)
@@ -235,9 +243,13 @@ def update_settings(payload: RuntimeSettingsRequest, request: Request):
         raise HTTPException(400, str(exc)) from exc
     if current.refresh_interval_minutes != updated.refresh_interval_minutes and services.scheduler is not None:
         services.scheduler.reschedule()
-    if current.health_interval_seconds != updated.health_interval_seconds and getattr(
-        services, "health_scheduler", None
-    ) is not None:
+    if getattr(services, "health_scheduler", None) is not None and (
+        current.health_interval_seconds != updated.health_interval_seconds
+        or current.health_night_enabled != updated.health_night_enabled
+        or current.health_night_interval_seconds != updated.health_night_interval_seconds
+        or current.health_night_start_hour != updated.health_night_start_hour
+        or current.health_night_end_hour != updated.health_night_end_hour
+    ):
         services.health_scheduler.reschedule()
     reauthenticate = current.access_mode != updated.access_mode
     if reauthenticate:
@@ -397,6 +409,10 @@ def health_overview(request: Request):
     return {
         "enabled": settings.health_enabled,
         "interval_seconds": settings.health_interval_seconds,
+        "night_enabled": settings.health_night_enabled,
+        "night_interval_seconds": settings.health_night_interval_seconds,
+        "night_start_hour": settings.health_night_start_hour,
+        "night_end_hour": settings.health_night_end_hour,
         "timeout_seconds": settings.health_timeout_seconds,
         "checked_at": max((row["checked_at"] for row in rows), default=None),
         "total": len(nodes),

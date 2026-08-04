@@ -52,6 +52,10 @@ describe('Overview', () => {
       .mockResolvedValueOnce({
         enabled: true,
         interval_seconds: 600,
+        night_enabled: false,
+        night_interval_seconds: 600,
+        night_start_hour: 0,
+        night_end_hour: 8,
         timeout_seconds: 5,
         checked_at: 1_800_000_000,
         total: 3,
@@ -83,6 +87,10 @@ describe('Overview', () => {
       .mockResolvedValueOnce({
         enabled: true,
         interval_seconds: 600,
+        night_enabled: false,
+        night_interval_seconds: 600,
+        night_start_hour: 0,
+        night_end_hour: 8,
         timeout_seconds: 5,
         checked_at: 1_800_000_000,
         total: 2,
@@ -102,12 +110,39 @@ describe('Overview', () => {
     expect(text).toContain('最近检查失败的节点（1）')
   })
 
+  it('shows the night schedule when reduced night frequency is enabled', async () => {
+    api.request
+      .mockResolvedValueOnce(loadedOverview)
+      .mockResolvedValueOnce({
+        enabled: true,
+        interval_seconds: 60,
+        night_enabled: true,
+        night_interval_seconds: 600,
+        night_start_hour: 0,
+        night_end_hour: 8,
+        timeout_seconds: 5,
+        checked_at: 1_800_000_000,
+        total: 2,
+        online: 2,
+        nodes: [],
+      })
+    const wrapper = mount(Overview, { global: { stubs: viewStubs } })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('60 秒')
+    expect(wrapper.text()).toContain('夜间 0:00–8:00 为 600 秒')
+  })
+
   it('warns when health checking is disabled', async () => {
     api.request
       .mockResolvedValueOnce(loadedOverview)
       .mockResolvedValueOnce({
         enabled: false,
         interval_seconds: 600,
+        night_enabled: false,
+        night_interval_seconds: 600,
+        night_start_hour: 0,
+        night_end_hour: 8,
         timeout_seconds: 5,
         checked_at: null,
         total: 0,

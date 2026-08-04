@@ -169,7 +169,9 @@ def create_app(
         )
         health_scheduler = RefreshScheduler(
             _HealthTask(services.integration),
-            delay_seconds=lambda: services.runtime_settings.get().health_interval_seconds,
+            delay_seconds=lambda: services.runtime_settings.get().effective_health_interval(
+                time.localtime().tm_hour
+            ),
         )
         services.scheduler = scheduler
         services.health_scheduler = health_scheduler
