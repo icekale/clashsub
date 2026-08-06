@@ -27,6 +27,20 @@ export function createApiClient(fetchImpl = fetch, onUnauthorized = () => {}) {
         onUnauthorized()
       }
       if (!response.ok) {
+        // 403 + 已携带 CSRF：令牌可能已被其他标签页/重新登录轮换，重新同步一次并重试。
+        if (response.status === 403 && csrf && !options.__csrfRetried) {
+          const sessionResponse = await fetchImpl('/api/auth/session', {
+            method: 'GET',
+            credentials: 'same-origin',
+          })
+          if (sessionResponse.ok) {
+            const sessionPayload = await sessionResponse.json().catch(() => ({}))
+            if (sessionPayload.csrf_token) {
+              csrf = sessionPayload.csrf_token
+              return this.request(path, { ...options, __csrfRetried: true })
+            }
+          }
+        }
         throw new Error(payload.detail || payload.message || `请求失败 (${response.status})`)
       }
       return payload

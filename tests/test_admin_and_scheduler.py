@@ -55,6 +55,21 @@ def test_admin_requires_session_and_manages_one_time_share(client):
     assert client.post(f"/api/admin/shares/{created['id']}/revoke", headers=headers).status_code == 204
 
 
+def test_restore_session_keeps_csrf_stable_across_tabs(client):
+    """A second page load (restore) must not invalidate the first page's CSRF token."""
+    csrf = login(client)
+    restored = client.get("/api/auth/session")
+    assert restored.status_code == 200
+    restored_again = client.get("/api/auth/session")
+    assert restored_again.json()["csrf_token"] == restored.json()["csrf_token"]
+    # The original token from login still authorizes CSRF-protected mutations.
+    assert client.post(
+        "/api/admin/shares",
+        headers={"X-CSRF-Token": csrf},
+        json={"label": "still-works", "days": 30, "allow_clash": False},
+    ).status_code == 201
+
+
 def test_public_mode_requires_acknowledgement_and_logs_out(client):
     csrf = login(client)
     payload = {

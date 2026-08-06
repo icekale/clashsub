@@ -87,7 +87,7 @@ def restore_session(request: Request):
     now = time.time()
     if not services.auth.authenticate(session_token, None, now):
         raise HTTPException(401, "unauthorized")
-    csrf = services.auth.rotate_csrf(session_token, now)
+    csrf = services.auth.csrf_for_session(session_token, now)
     return {"username": services.db.get_admin()["username"], "csrf_token": csrf}
 
 

@@ -301,6 +301,32 @@ def test_secret_and_share_recovery_columns_migrate_in_place(tmp_path: Path):
         assert conn.execute("SELECT name FROM encrypted_secrets").fetchall() == []
 
 
+def test_legacy_sessions_gain_csrf_token_column_in_place(tmp_path: Path):
+    db = Database(tmp_path / "state.db")
+    with db.connect() as conn:
+        conn.executescript(
+            """
+            CREATE TABLE sessions (
+              token_hash TEXT PRIMARY KEY,
+              csrf_hash TEXT NOT NULL,
+              admin_id INTEGER NOT NULL,
+              expires_at REAL NOT NULL,
+              created_at REAL NOT NULL
+            );
+            INSERT INTO sessions(token_hash, csrf_hash, admin_id, expires_at, created_at)
+            VALUES ('legacy-hash', 'csrf-hash', 1, 2, 1);
+            """
+        )
+
+    db.initialize()
+
+    with db.connect() as conn:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(sessions)")}
+        assert "csrf_token" in columns
+        row = conn.execute("SELECT * FROM sessions WHERE token_hash='legacy-hash'").fetchone()
+        assert row["csrf_token"] is None
+
+
 def test_protocol_status_success_and_failure_are_recorded(tmp_path: Path):
     db = Database(tmp_path / "state.db")
     db.initialize()

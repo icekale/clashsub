@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS admins (
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,
   csrf_hash TEXT NOT NULL,
+  csrf_token TEXT,
   admin_id INTEGER NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
   expires_at REAL NOT NULL,
   created_at REAL NOT NULL
@@ -96,6 +97,10 @@ SHARE_MIGRATIONS = (
     ("base_url", "ALTER TABLE shares ADD COLUMN base_url TEXT"),
 )
 
+SESSION_MIGRATIONS = (
+    ("csrf_token", "ALTER TABLE sessions ADD COLUMN csrf_token TEXT"),
+)
+
 
 class Database:
     def __init__(self, path):
@@ -124,6 +129,10 @@ class Database:
             share_columns = {row["name"] for row in conn.execute("PRAGMA table_info(shares)")}
             for name, statement in SHARE_MIGRATIONS:
                 if name not in share_columns:
+                    conn.execute(statement)
+            session_columns = {row["name"] for row in conn.execute("PRAGMA table_info(sessions)")}
+            for name, statement in SESSION_MIGRATIONS:
+                if name not in session_columns:
                     conn.execute(statement)
 
     @contextmanager
@@ -345,20 +354,30 @@ class Database:
                 (username,),
             ).fetchone()
 
-    def insert_session(self, token_hash: str, csrf_hash: str, expires_at: float, created_at: float):
+    def insert_session(
+        self,
+        token_hash: str,
+        csrf_hash: str,
+        csrf_token: str,
+        expires_at: float,
+        created_at: float,
+    ):
         with self.transaction() as conn:
             conn.execute(
-                "INSERT INTO sessions(token_hash, csrf_hash, admin_id, expires_at, created_at) VALUES (?, ?, 1, ?, ?)",
-                (token_hash, csrf_hash, expires_at, created_at),
+                "INSERT INTO sessions(token_hash, csrf_hash, csrf_token, admin_id, expires_at, created_at) VALUES (?, ?, ?, 1, ?, ?)",
+                (token_hash, csrf_hash, csrf_token, expires_at, created_at),
             )
 
     def get_session(self, token_hash: str):
         with self.connect() as conn:
             return conn.execute("SELECT * FROM sessions WHERE token_hash=?", (token_hash,)).fetchone()
 
-    def update_session_csrf(self, token_hash: str, csrf_hash: str):
+    def set_session_csrf_token(self, token_hash: str, csrf_hash: str, csrf_token: str):
         with self.transaction() as conn:
-            conn.execute("UPDATE sessions SET csrf_hash=? WHERE token_hash=?", (csrf_hash, token_hash))
+            conn.execute(
+                "UPDATE sessions SET csrf_hash=?, csrf_token=? WHERE token_hash=?",
+                (csrf_hash, csrf_token, token_hash),
+            )
 
     def delete_session(self, token_hash: str):
         with self.transaction() as conn:

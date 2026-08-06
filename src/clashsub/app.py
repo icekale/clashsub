@@ -6,7 +6,6 @@ from dataclasses import asdict, dataclass
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
 
 from .access import AccessPolicy, SlidingWindowLimiter
 from .api import admin, auth as auth_api, public
@@ -220,12 +219,6 @@ def create_app(
     app.include_router(auth_api.router)
     app.include_router(admin.router)
 
-    app.mount(
-        "/app/assets",
-        StaticFiles(directory=config.frontend_dir / "assets", check_dir=False),
-        name="app-assets",
-    )
-
     @app.get("/", include_in_schema=False)
     def root_redirect():
         return RedirectResponse("/app/")
@@ -233,10 +226,17 @@ def create_app(
     @app.get("/app/", include_in_schema=False)
     @app.get("/app/{path:path}", include_in_schema=False)
     def spa(path: str = ""):
+        if path.startswith("assets/"):
+            asset = config.frontend_dir / path
+            if not asset.is_file():
+                raise HTTPException(404, "asset not found")
+            # 内容指纹文件名永久不变，可安全长期缓存。
+            return FileResponse(asset, headers={"Cache-Control": "public, max-age=31536000, immutable"})
         index = config.frontend_dir / "index.html"
         if not index.is_file():
             raise HTTPException(404, "frontend not built")
-        return FileResponse(index)
+        # 内容指纹资源可以长期缓存；index.html 必须每次校验，避免引用已随构建删除的旧资源。
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
     return app
 

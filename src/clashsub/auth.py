@@ -44,7 +44,7 @@ class AuthService:
         session = secrets.token_urlsafe(32)
         csrf = secrets.token_urlsafe(32)
         expires = now + self.SESSION_SECONDS
-        self.db.insert_session(digest(session), digest(csrf), expires, now)
+        self.db.insert_session(digest(session), digest(csrf), csrf, expires, now)
         return LoginResult(session, csrf, expires)
 
     def authenticate(
@@ -92,10 +92,22 @@ class AuthService:
             now,
         )
 
-    def rotate_csrf(self, session_token: str, now: float | None = None) -> str:
+    def csrf_for_session(self, session_token: str, now: float | None = None) -> str:
+        """Return the session's CSRF token without rotating it.
+
+        The token is stable for the life of the session so that multiple pages or
+        tabs sharing the same session cookie all remain usable. Legacy sessions
+        created before raw token storage get a token generated on first restore.
+        """
         current = time.time() if now is None else now
-        if not self.authenticate(session_token, None, current):
+        row = self.db.get_session(digest(session_token))
+        if not row:
             raise PermissionError("invalid session")
+        if row["expires_at"] <= current:
+            self.db.delete_session(row["token_hash"])
+            raise PermissionError("invalid session")
+        if row["csrf_token"]:
+            return row["csrf_token"]
         csrf = secrets.token_urlsafe(32)
-        self.db.update_session_csrf(digest(session_token), digest(csrf))
+        self.db.set_session_csrf_token(row["token_hash"], digest(csrf), csrf)
         return csrf

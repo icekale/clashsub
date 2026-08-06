@@ -84,7 +84,7 @@ def test_startup_removes_expired_sessions(app_settings):
     db = Database(app_settings.data_dir / "state.db")
     db.initialize()
     db.bootstrap_admin("initial-user", "hash", 0)
-    db.insert_session("expired-hash", "csrf-hash", expires_at=1, created_at=0)
+    db.insert_session("expired-hash", "csrf-hash", "csrf-token", expires_at=1, created_at=0)
 
     with TestClient(
         create_app(app_settings, start_scheduler=False),
