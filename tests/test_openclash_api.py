@@ -45,6 +45,36 @@ def _client(app):
 
 
 def test_openclash_credentials_roundtrip(tmp_path):
+        yield test_client
+
+
+def test_build_services_preserves_runtime_settings_when_lan_base_url_empty(tmp_path):
+    config = _app_settings(tmp_path)
+    first = build_services(config)
+    first.runtime_settings.update(
+        RuntimeSettings(
+            refresh_interval_minutes=30,
+            access_mode="public",
+            public_base_url="https://sub.example.com",
+            health_enabled=True,
+            health_interval_seconds=300,
+            lan_base_url="",
+        )
+    )
+
+    # 模拟重启：lan_base_url 为空时应只补默认值，不得覆盖其它运行期设置
+    second = build_services(config)
+    stored = second.runtime_settings.get()
+
+    assert stored.lan_base_url == "http://127.0.0.1:8080"
+    assert stored.refresh_interval_minutes == 30
+    assert stored.access_mode == "public"
+    assert stored.public_base_url == "https://sub.example.com"
+    assert stored.health_enabled is True
+    assert stored.health_interval_seconds == 300
+
+
+def test_openclash_credentials_roundtrip(tmp_path):
     app = create_app(_app_settings(tmp_path), start_scheduler=False)
     with _client(app) as client:
         csrf = _login(client)

@@ -471,9 +471,14 @@ class UpstreamRefresher:
             parsed_addresses = tuple(ipaddress.ip_address(address) for address in addresses)
         except ValueError:
             raise InvalidSubscription("subscription destination has an invalid address") from None
-        if any(not self._is_allowed_destination(address) for address in parsed_addresses):
+        allowed_addresses = tuple(
+            dict.fromkeys(
+                str(address) for address in parsed_addresses if self._is_allowed_destination(address)
+            )
+        )
+        if not allowed_addresses:
             raise InvalidSubscription("subscription destination is not public")
-        return url, hostname, tuple(dict.fromkeys(str(address) for address in parsed_addresses))
+        return url, hostname, allowed_addresses
 
     def _is_allowed_destination(self, address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
         if address.is_global and not address.is_multicast:

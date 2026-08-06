@@ -326,10 +326,9 @@ async def test_download_rejects_non_global_ip_destinations(tmp_path, url):
         (),
         ("127.0.0.1",),
         ("10.0.0.1",),
-        (PUBLIC_TEST_IP, "169.254.169.254"),
     ],
 )
-async def test_download_rejects_domains_with_any_non_global_dns_answer(tmp_path, addresses):
+async def test_download_rejects_domains_with_no_allowed_dns_answer(tmp_path, addresses):
     async def resolver(hostname: str, port: int) -> tuple[str, ...]:
         assert (hostname, port) == ("public.example.test", 443)
         return addresses
@@ -345,6 +344,30 @@ async def test_download_rejects_domains_with_any_non_global_dns_answer(tmp_path,
     ).refresh()
 
     assert result.updated is False
+
+
+@pytest.mark.asyncio
+async def test_download_filters_mixed_dns_answers_to_allowed_only(tmp_path):
+    good = base64.b64encode(b"trojan://pass@node.example:443#one\n")
+    requested_hosts: list[str] = []
+
+    async def resolver(hostname: str, port: int) -> tuple[str, ...]:
+        assert (hostname, port) == ("public.example.test", 443)
+        return (PUBLIC_TEST_IP, "169.254.169.254")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_hosts.append(request.url.host)
+        return httpx.Response(200, content=good)
+
+    result = await _refresher(
+        tmp_path,
+        "https://public.example.test/sub",
+        httpx.MockTransport(handler),
+        resolver,
+    ).refresh()
+
+    assert result.updated is True
+    assert requested_hosts == [PUBLIC_TEST_IP]
 
 
 @pytest.mark.asyncio

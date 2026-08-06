@@ -2,7 +2,7 @@ import asyncio
 import json
 import time
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
@@ -54,7 +54,10 @@ def build_services(config: Settings, transport=None, resolver=None) -> Services:
     db.delete_expired_sessions(time.time())
     runtime = SettingsStore(db)
     if not runtime.get().lan_base_url:
-        runtime.update(RuntimeSettings(lan_base_url="http://127.0.0.1:8080"))
+        current = runtime.get()
+        runtime.update(
+            RuntimeSettings(**{**asdict(current), "lan_base_url": "http://127.0.0.1:8080"})
+        )
     cache = CacheFiles(config.data_dir / "cache")
     credential_store = SecretStore(db, config.encryption_key_file)
     auth = AuthService(db)

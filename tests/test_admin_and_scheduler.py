@@ -193,3 +193,21 @@ async def test_scheduler_refreshes_immediately_and_stops_cleanly():
     await scheduler.stop()
     await task
     assert calls == ["refresh"]
+
+
+@pytest.mark.asyncio
+async def test_scheduler_honors_reschedule_during_refresh():
+    calls = []
+
+    class FakeRefresher:
+        async def refresh(self):
+            calls.append("refresh")
+            if len(calls) == 1:
+                scheduler.reschedule()
+
+    scheduler = RefreshScheduler(FakeRefresher(), delay_seconds=lambda: 3600)
+    task = asyncio.create_task(scheduler.run())
+    await asyncio.sleep(0.05)
+    await scheduler.stop()
+    await task
+    assert len(calls) >= 2

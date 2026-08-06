@@ -15,13 +15,18 @@ class RefreshScheduler:
 
     async def run(self):
         while not self._stop.is_set():
+            # 在 refresh 之前清空唤醒信号：若 refresh 期间收到 reschedule()
+            # （例如设置变更触发立即刷新），保留信号并在刷新后直接进入下一轮，
+            # 而不是被清掉后继续休眠整个间隔。
+            self._wake.clear()
             try:
                 await self.refresher.refresh()
             except Exception as exc:
                 self._logger.error("scheduled refresh failed: %s", type(exc).__name__)
             if self._stop.is_set():
                 break
-            self._wake.clear()
+            if self._wake.is_set():
+                continue
             try:
                 await asyncio.wait_for(self._wake.wait(), timeout=self.delay_seconds())
             except asyncio.TimeoutError:
