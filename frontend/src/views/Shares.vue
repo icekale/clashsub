@@ -10,6 +10,7 @@ import { buildShareRequest, statusLabel } from '../shareView.js'
 const message = useMessage()
 const items = ref([])
 const loading = ref(true)
+const refreshing = ref(false)
 const submitting = ref(false)
 const error = ref('')
 const actionKey = ref('')
@@ -93,7 +94,9 @@ function clearRevealedLinks(shareId) {
 }
 
 async function fetchAllLinks(item) {
-  const kinds = item.allow_clash ? ['raw', 'clash', 'surge', 'loon', 'smart'] : ['raw']
+  const kinds = item.allow_clash
+    ? ['raw', 'clash', 'surge', 'loon', 'smart']
+    : item.allow_raw ? ['raw'] : []
   const results = await Promise.allSettled(kinds.map(async (kind) => [
     kind,
     (await api.request(`/api/admin/shares/${item.id}/reveal`, {
@@ -152,7 +155,12 @@ async function copyLink(url) {
 }
 
 async function load() {
-  loading.value = true
+  // 首次加载显示骨架屏；已有数据时刷新只转按钮，避免整页闪烁/滚动跳动。
+  if (!items.value.length) {
+    loading.value = true
+  } else {
+    refreshing.value = true
+  }
   clearRevealedLinks()
   try {
     items.value = await api.request('/api/admin/shares')
@@ -166,6 +174,7 @@ async function load() {
     error.value = requestError.message
   } finally {
     loading.value = false
+    refreshing.value = false
   }
 }
 
@@ -234,7 +243,7 @@ load()
       <h1>分享链接</h1>
       <p>每位朋友使用独立密钥；链接在到期、撤销、删除或轮换前都可以重复查看。</p>
     </div>
-    <n-button secondary :loading="loading" @click="load">刷新列表</n-button>
+    <n-button secondary :loading="loading || refreshing" @click="load">刷新列表</n-button>
   </div>
 
   <n-alert v-if="error" type="error" title="无法读取分享记录" class="section-block">
@@ -349,9 +358,30 @@ load()
             :loading="actionKey === `${item.id}:reveal:clash`"
             @click="revealExisting(item, 'clash')"
           >查看 Clash 链接</n-button>
-          <n-button v-if="item.allow_clash" secondary size="small" :disabled="item.revoked || item.expired || !item.recoverable" @click="revealExisting(item, 'surge')">查看 Surge 链接</n-button>
-          <n-button v-if="item.allow_clash" secondary size="small" :disabled="item.revoked || item.expired || !item.recoverable" @click="revealExisting(item, 'loon')">查看 Loon 链接</n-button>
-          <n-button v-if="item.allow_clash" secondary size="small" :disabled="item.revoked || item.expired || !item.recoverable" @click="revealExisting(item, 'smart')">查看智能链接</n-button>
+          <n-button
+            v-if="item.allow_clash"
+            secondary
+            size="small"
+            :disabled="item.revoked || item.expired || !item.recoverable"
+            :loading="actionKey === `${item.id}:reveal:surge`"
+            @click="revealExisting(item, 'surge')"
+          >查看 Surge 链接</n-button>
+          <n-button
+            v-if="item.allow_clash"
+            secondary
+            size="small"
+            :disabled="item.revoked || item.expired || !item.recoverable"
+            :loading="actionKey === `${item.id}:reveal:loon`"
+            @click="revealExisting(item, 'loon')"
+          >查看 Loon 链接</n-button>
+          <n-button
+            v-if="item.allow_clash"
+            secondary
+            size="small"
+            :disabled="item.revoked || item.expired || !item.recoverable"
+            :loading="actionKey === `${item.id}:reveal:smart`"
+            @click="revealExisting(item, 'smart')"
+          >查看智能链接</n-button>
           <n-button
             secondary
             size="small"

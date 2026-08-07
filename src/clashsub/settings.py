@@ -79,11 +79,28 @@ class SettingsStore:
     def __init__(self, db: Database):
         self.db = db
 
+    @staticmethod
+    def _parse_int(values: dict[str, str], key: str, default: int) -> int:
+        raw = values.get(key)
+        try:
+            return int(raw) if raw else default
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _parse_float(values: dict[str, str], key: str, default: float) -> float:
+        raw = values.get(key)
+        try:
+            return float(raw) if raw else default
+        except (TypeError, ValueError):
+            return default
+
     def get(self) -> RuntimeSettings:
         with self.db.connect() as conn:
             values = {row["key"]: row["value"] for row in conn.execute("SELECT key, value FROM app_settings")}
+        health_interval_minutes = self._parse_int(values, "health_interval_minutes", 10)
         return RuntimeSettings(
-            refresh_interval_minutes=int(values.get("refresh_interval_minutes", "60")),
+            refresh_interval_minutes=self._parse_int(values, "refresh_interval_minutes", 60),
             access_mode=values.get("access_mode", "lan"),
             lan_base_url=values.get("lan_base_url", ""),
             public_base_url=values.get("public_base_url", ""),
@@ -93,18 +110,18 @@ class SettingsStore:
             openclash_provider=values.get("openclash_provider", ""),
             health_enabled=values.get("health_enabled", "false") == "true",
             health_interval_seconds=(
-                int(values["health_interval_seconds"])
+                self._parse_int(values, "health_interval_seconds", health_interval_minutes * 60)
                 if values.get("health_interval_seconds")
-                else int(values.get("health_interval_minutes", "10")) * 60
+                else health_interval_minutes * 60
             ),
-            health_timeout_seconds=int(values.get("health_timeout_seconds", "5")),
+            health_timeout_seconds=self._parse_int(values, "health_timeout_seconds", 5),
             health_refresh_enabled=values.get("health_refresh_enabled", "false") == "true",
-            health_refresh_online_ratio=float(values.get("health_refresh_online_ratio", "0.5")),
-            health_refresh_cooldown_minutes=int(values.get("health_refresh_cooldown_minutes", "10")),
+            health_refresh_online_ratio=self._parse_float(values, "health_refresh_online_ratio", 0.5),
+            health_refresh_cooldown_minutes=self._parse_int(values, "health_refresh_cooldown_minutes", 10),
             health_night_enabled=values.get("health_night_enabled", "false") == "true",
-            health_night_interval_seconds=int(values.get("health_night_interval_seconds", "600")),
-            health_night_start_hour=int(values.get("health_night_start_hour", "0")),
-            health_night_end_hour=int(values.get("health_night_end_hour", "8")),
+            health_night_interval_seconds=self._parse_int(values, "health_night_interval_seconds", 600),
+            health_night_start_hour=self._parse_int(values, "health_night_start_hour", 0),
+            health_night_end_hour=self._parse_int(values, "health_night_end_hour", 8),
         ).validated()
 
     def update(self, settings: RuntimeSettings) -> RuntimeSettings:

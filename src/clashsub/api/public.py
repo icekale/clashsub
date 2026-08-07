@@ -1,4 +1,6 @@
+import asyncio
 import time
+from ipaddress import ip_address
 
 import yaml
 
@@ -18,14 +20,27 @@ def _services(request: Request):
 
 def _allow_request(request: Request, scope: str):
     services = _services(request)
+    if request.client is None:
+        raise HTTPException(400, "client address unavailable")
     peer = request.client.host
     forwarded = request.headers.get("x-forwarded-for")
     mode = services.runtime_settings.get().access_mode
     if not services.access.allowed(mode, peer, forwarded):
         raise HTTPException(404)
     effective = str(services.access.effective_ip(peer, forwarded))
-    if scope == "share" and not services.share_limiter.allow(f"share:{effective}", time.time()):
+    if (
+        scope == "share"
+        and not _is_loopback(effective)
+        and not services.share_limiter.allow(f"share:{effective}", time.time())
+    ):
         raise HTTPException(429, "too many requests")
+
+
+def _is_loopback(address: str) -> bool:
+    try:
+        return ip_address(address).is_loopback
+    except ValueError:
+        return False
 
 
 async def _raw_response(request: Request, token: str, require_clash: bool = False):
@@ -42,7 +57,11 @@ async def _raw_response(request: Request, token: str, require_clash: bool = Fals
     state = services.db.runtime_state()
     if not state["current_digest"]:
         raise HTTPException(503, "subscription cache unavailable")
-    snapshot = services.cache.read_raw(state["current_digest"])
+    try:
+        snapshot = services.cache.read_raw(state["current_digest"])
+    except OSError:
+        logger.warning("raw cache unreadable digest=%s", state["current_digest"])
+        raise HTTPException(503, "subscription cache unavailable") from None
     headers = {
         key: value
         for key, value in snapshot.safe_headers.items()
@@ -81,8 +100,8 @@ async def ha_subscription(token: str, request: Request):
         raise HTTPException(503, "subscription cache unavailable")
     try:
         snapshot = services.cache.read_raw(digest)
-        document = yaml.safe_load(snapshot.payload)
-    except (OSError, yaml.YAMLError, AttributeError):
+        document = await asyncio.to_thread(yaml.safe_load, snapshot.payload)
+    except (OSError, yaml.YAMLError, RecursionError, AttributeError):
         raise HTTPException(503, "subscription cache unavailable") from None
     proxies = document.get("proxies") if isinstance(document, dict) else None
     if not isinstance(proxies, list):
@@ -101,9 +120,13 @@ async def ha_subscription(token: str, request: Request):
             for row in rows
             if not row["ok"] and now - row["checked_at"] <= freshness_window
         }
-    filtered = [proxy for proxy in proxies if proxy.get("name") not in recent_unhealthy]
+    filtered = [
+        proxy
+        for proxy in proxies
+        if str(proxy.get("name", "")).strip() not in recent_unhealthy
+    ]
     document["proxies"] = filtered
-    body = yaml.safe_dump(document, allow_unicode=True, sort_keys=False)
+    body = await asyncio.to_thread(yaml.safe_dump, document, allow_unicode=True, sort_keys=False)
     headers = {"Cache-Control": "no-store"}
     try:
         safe_headers = {

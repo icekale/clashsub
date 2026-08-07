@@ -39,6 +39,10 @@ export function createApiClient(fetchImpl = fetch, onUnauthorized = () => {}) {
               csrf = sessionPayload.csrf_token
               return this.request(path, { ...options, __csrfRetried: true })
             }
+          } else if (sessionResponse.status === 401) {
+            // 会话已在别处失效（改密/全部会话被清）：进入未登录状态。
+            csrf = ''
+            onUnauthorized()
           }
         }
         throw new Error(payload.detail || payload.message || `请求失败 (${response.status})`)

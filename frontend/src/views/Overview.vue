@@ -59,7 +59,10 @@ function formatSource(value) {
 }
 
 async function load() {
-  loading.value = true
+  // 首次加载显示骨架屏；已有数据时静默刷新，避免整页闪烁。
+  if (!data.value) {
+    loading.value = true
+  }
   try {
     const [overview, healthPayload] = await Promise.all([
       api.request('/api/admin/overview'),

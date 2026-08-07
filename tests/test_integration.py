@@ -290,7 +290,7 @@ async def test_push_now_raises_when_not_configured(tmp_path):
         SecretStore(db, _key_file(tmp_path)),
         NodeHealthChecker(db, CacheFiles(tmp_path / "cache")),
     )
-    with pytest.raises(OpenClashError, match="not configured"):
+    with pytest.raises(OpenClashError, match="disabled|not configured"):
         await integration.push_now()
 
 

@@ -18,7 +18,11 @@ class OpenClashClient:
         return await self._request("GET", "/version")
 
     async def refresh_provider(self, name: str) -> dict:
-        if not name or any(character in name for character in "/?#"):
+        # 只允许 URL 安全字符；`.`/`..`/`%`/`\` 会被 httpx 规范化或解码，
+        # 可能意外指向别的资源。
+        if not name or not all(character.isalnum() or character in "_.-" for character in name):
+            raise OpenClashError("invalid provider name")
+        if name in {".", ".."} or ".." in name:
             raise OpenClashError("invalid provider name")
         return await self._request(
             "PUT",

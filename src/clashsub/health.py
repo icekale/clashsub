@@ -117,8 +117,13 @@ class NodeHealthChecker:
         self.resolver = resolver or _resolve_host
         self.max_concurrency = max_concurrency
         self.timeout_seconds = timeout_seconds
+        self._run_lock = asyncio.Lock()
 
     async def run_once(self, timeout_seconds: float | None = None) -> HealthSummary:
+        async with self._run_lock:
+            return await self._run_once_locked(timeout_seconds)
+
+    async def _run_once_locked(self, timeout_seconds: float | None = None) -> HealthSummary:
         state = self.db.runtime_state()
         digest = state["current_digest"] if state else None
         if not digest:
@@ -138,6 +143,8 @@ class NodeHealthChecker:
         resolution_cache: dict[str, tuple[str, ...]] = {}
 
         async def check_one(proxy) -> tuple[str, int, float | None, float] | None:
+            if not isinstance(proxy, dict):
+                return None
             name = str(proxy.get("name", "")).strip()
             if not name:
                 return None

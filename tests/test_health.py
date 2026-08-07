@@ -63,6 +63,30 @@ async def test_health_check_without_cache_returns_empty(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_health_check_skips_non_dict_proxy_entries(tmp_path):
+    db = Database(tmp_path / "state.db")
+    db.initialize()
+    cache = CacheFiles(tmp_path / "cache")
+    # 裸字符串节点（合法 YAML）以前会让整个健康检查崩溃。
+    payload = (
+        "proxies:\n"
+        "  - {name: ok, type: trojan, server: 127.0.0.1, port: 1, password: pass}\n"
+        "  - just-a-string\n"
+        "  - {name: broken, type: trojan, server: 127.0.0.1, port: 1, password: pass}\n"
+    ).encode()
+    digest = cache.publish_raw(payload, {})
+    db.record_refresh_success(digest, 2, "yaml", {}, time.time(), "test")
+
+    async def resolver(hostname, port):
+        return ("127.0.0.1",)
+
+    checker = NodeHealthChecker(db, cache, resolver=resolver)
+    summary = await checker.run_once()
+    assert summary.total == 2
+    assert summary.online == 0
+
+
+@pytest.mark.asyncio
 async def test_doh_resolver_extracts_a_records():
     def handler(request):
         return httpx.Response(

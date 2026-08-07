@@ -14,7 +14,7 @@ from .cache_files import CacheFiles
 from .config import Settings
 from .converter import ConverterService
 from .db import Database
-from .events import configure_logging
+from .events import configure_logging, get_logger
 from .health import NodeHealthChecker
 from .integration import IntegrationService
 from .scheduler import RefreshScheduler
@@ -59,6 +59,13 @@ def build_services(config: Settings, transport=None, resolver=None) -> Services:
         )
     cache = CacheFiles(config.data_dir / "cache")
     credential_store = SecretStore(db, config.encryption_key_file)
+    if not credential_store.available:
+        # 主密钥缺失/损坏会静默关闭分享恢复与凭据加密存储，必须启动时即暴露。
+        logger = get_logger("app")
+        logger.error(
+            "encrypted secret store unavailable: share recovery and stored credentials "
+            "will not work (check ENCRYPTION_KEY_SECRET_FILE)"
+        )
     auth = AuthService(db)
     auth.bootstrap(
         config.initial_username.get_secret_value(),
@@ -213,7 +220,11 @@ def create_app(
                 allowed = False
             if not allowed:
                 return JSONResponse({"detail": "Not Found"}, status_code=404)
-        return await call_next(request)
+        response = await call_next(request)
+        # 管理接口响应含账号元数据、分享记录、日志与 CSRF 令牌，禁止被共享缓存/代理留存。
+        if path.startswith("/api"):
+            response.headers.setdefault("Cache-Control", "no-store")
+        return response
 
     app.include_router(public.router)
     app.include_router(auth_api.router)

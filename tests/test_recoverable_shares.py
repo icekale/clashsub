@@ -1,6 +1,7 @@
 import base64
 from dataclasses import replace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from clashsub.app import create_app
@@ -47,6 +48,28 @@ def test_rotate_replaces_recoverable_token_without_changing_origin(tmp_path):
     assert rotated.raw_url == shares.reveal(created.id, "raw")
     assert rotated.clash_url == shares.reveal(created.id, "clash")
     assert db.get_share(created.id)["base_url"] == "https://share.example.test"
+
+
+def test_rotate_refreshes_stored_base_url_after_origin_change(tmp_path):
+    db, shares = _service(tmp_path)
+    created = shares.create("friend")
+    shares.settings.update(RuntimeSettings(lan_base_url="https://new.example.test"))
+
+    rotated = shares.rotate(created.id)
+
+    # 轮换后的恢复链接必须使用当前 base URL，而不是创建时的旧 origin。
+    assert rotated.raw_url.startswith("https://new.example.test/raw/")
+    assert shares.reveal(created.id, "raw") == rotated.raw_url
+    assert db.get_share(created.id)["base_url"] == "https://new.example.test"
+
+
+def test_rotate_raises_value_error_when_no_active_base_url(tmp_path):
+    db, shares = _service(tmp_path)
+    created = shares.create("friend")
+    shares.settings.update(RuntimeSettings(lan_base_url=""))
+
+    with pytest.raises(ValueError):
+        shares.rotate(created.id)
 
 
 def test_reveal_endpoint_is_csrf_protected_and_reusable(app_settings, tmp_path):

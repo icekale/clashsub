@@ -276,6 +276,9 @@ async function saveSettings() {
   } catch (requestError) {
     error.value = requestError.message
     message.error(requestError.message)
+    // 保存失败时把界面状态回滚到服务端实际状态，避免公网开关显示与服务器不一致。
+    form.access_mode = original.access_mode
+    publicAcknowledged.value = false
   } finally {
     saving.value = false
   }

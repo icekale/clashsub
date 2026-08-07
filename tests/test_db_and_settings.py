@@ -362,3 +362,22 @@ def test_fallback_success_keeps_protocol_error_but_clears_overall_failure(tmp_pa
     assert state["consecutive_failures"] == 0
     assert state["last_error"] is None
     assert state["protocol_last_error_category"] == "invalid_subscription"
+
+
+def test_settings_store_ignores_corrupt_values_instead_of_crashing(tmp_path: Path):
+    db = Database(tmp_path / "state.db")
+    db.initialize()
+    with db.transaction() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings(key, value) VALUES (?, ?)",
+            ("refresh_interval_minutes", "abc"),
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings(key, value) VALUES (?, ?)",
+            ("health_refresh_online_ratio", "not-a-number"),
+        )
+
+    store = SettingsStore(db)
+    settings = store.get()
+    assert settings.refresh_interval_minutes == 60
+    assert settings.health_refresh_online_ratio == 0.5

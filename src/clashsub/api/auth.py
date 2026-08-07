@@ -41,6 +41,17 @@ def _secure_cookie(request: Request) -> bool:
     )
 
 
+def _delete_session_cookie(response: Response, request: Request) -> None:
+    # 与 _set_session_cookie 保持一致的属性，确保 Secure 会话不会被普通 HTTP 意外携带。
+    response.delete_cookie(
+        COOKIE_NAME,
+        path="/",
+        httponly=True,
+        secure=_secure_cookie(request),
+        samesite="strict",
+    )
+
+
 def _set_session_cookie(response: Response, value: str, secure: bool) -> None:
     response.set_cookie(
         COOKIE_NAME,
@@ -100,7 +111,7 @@ def logout(request: Request):
         raise HTTPException(403, "invalid session or CSRF token")
     services.auth.logout(session_token)
     response = Response(status_code=204)
-    response.delete_cookie(COOKIE_NAME, path="/", samesite="strict")
+    _delete_session_cookie(response, request)
     return response
 
 
@@ -123,5 +134,5 @@ def change_credentials(payload: CredentialRequest, request: Request):
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     response = JSONResponse({"reauthenticate": True})
-    response.delete_cookie(COOKIE_NAME, path="/", samesite="strict")
+    _delete_session_cookie(response, request)
     return response

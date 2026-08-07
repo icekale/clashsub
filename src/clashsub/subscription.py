@@ -5,6 +5,7 @@ import base64
 import ipaddress
 import json
 import socket
+import sqlite3
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -85,7 +86,7 @@ def validate_subscription(payload: bytes, max_bytes: int) -> ValidatedSubscripti
         return ValidatedSubscription(payload, count, "uri-list")
     try:
         document = yaml.safe_load(text)
-    except yaml.YAMLError as exc:
+    except (yaml.YAMLError, RecursionError) as exc:
         raise InvalidSubscription("subscription is not valid YAML") from exc
     proxies = document.get("proxies") if isinstance(document, dict) else None
     if isinstance(proxies, list) and proxies:
@@ -95,6 +96,8 @@ def validate_subscription(payload: bytes, max_bytes: int) -> ValidatedSubscripti
 
 SAFE_RESPONSE_HEADERS = {"subscription-userinfo", "profile-update-interval"}
 MAX_REDIRECTS = 3
+# 整个下载流程（含重定向、DNS 重解析）的总墙钟时限，防止慢速滴流占用刷新锁。
+DOWNLOAD_TOTAL_DEADLINE = 60.0
 RESPONSE_CLASSIFICATION_BYTES = 64 * 1024
 REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
 CAPTCHA_MARKERS = ("captcha", "recaptcha", "turnstile", "人机")
@@ -282,11 +285,12 @@ class UpstreamRefresher:
             validated, safe_headers = await self._download(resolved)
             if self.credential_store is None or not self.credential_store.available:
                 return CredentialUpdateResult(False, 0, "secret_store_unavailable")
+            # 先提交缓存/状态，再持久化新凭据：若提交失败不会留下半套新凭据。
+            self._commit_success(validated, safe_headers, time.time(), "protocol")
             self.credential_store.put(
                 "airport_credentials",
                 json.dumps({"username": username, "password": password}, separators=(",", ":")),
             )
-            self._commit_success(validated, safe_headers, time.time(), "protocol")
             return CredentialUpdateResult(True, validated.node_count, None)
         except (
             V2BoardError,
@@ -294,6 +298,7 @@ class UpstreamRefresher:
             httpx.InvalidURL,
             InvalidSubscription,
             OSError,
+            sqlite3.Error,
             SecretStoreUnavailable,
         ) as exc:
             category = self._error_category(exc)
@@ -340,6 +345,7 @@ class UpstreamRefresher:
         source: str,
     ) -> str:
         digest = self.cache.publish_raw(validated.payload, safe_headers)
+        previous = self.db.runtime_state()["current_digest"]
         self.db.record_refresh_success(
             digest,
             validated.node_count,
@@ -349,8 +355,14 @@ class UpstreamRefresher:
             source,
         )
         self.cache.prune_raw({digest})
-        self.cache.clear_converted()
-        logger.info("refresh succeeded source=%s nodes=%d", source, validated.node_count)
+        if digest != previous:
+            self.cache.clear_converted()
+        logger.info(
+            "refresh succeeded source=%s nodes=%d%s",
+            source,
+            validated.node_count,
+            " (unchanged)" if digest == previous else "",
+        )
         return digest
 
     async def _notify_refreshed(self) -> None:
@@ -368,53 +380,56 @@ class UpstreamRefresher:
         current_url = resolved.url.get_secret_value()
         invalid_url = False
         try:
-            async with httpx.AsyncClient(
-                transport=self.transport,
-                follow_redirects=False,
-                timeout=20,
-                limits=httpx.Limits(max_keepalive_connections=0),
-            ) as client:
-                for redirect_count in range(MAX_REDIRECTS + 1):
-                    logical_url, hostname, addresses = await self._validate_download_url(
-                        current_url
-                    )
-                    status_code, headers, body = await self._fetch_download_hop(
-                        client,
-                        logical_url,
-                        hostname,
-                        addresses,
-                        resolved.user_agent,
-                    )
-                    location = headers.get("location")
-                    if status_code in REDIRECT_STATUS_CODES and location:
-                        if redirect_count == MAX_REDIRECTS:
-                            raise InvalidSubscription("subscription has too many redirects")
-                        current_url = self._redirect_url(str(logical_url), location)
-                        continue
+            async with asyncio.timeout(DOWNLOAD_TOTAL_DEADLINE):
+                async with httpx.AsyncClient(
+                    transport=self.transport,
+                    follow_redirects=False,
+                    timeout=20,
+                    limits=httpx.Limits(max_keepalive_connections=0),
+                ) as client:
+                    for redirect_count in range(MAX_REDIRECTS + 1):
+                        logical_url, hostname, addresses = await self._validate_download_url(
+                            current_url
+                        )
+                        status_code, headers, body = await self._fetch_download_hop(
+                            client,
+                            logical_url,
+                            hostname,
+                            addresses,
+                            resolved.user_agent,
+                        )
+                        location = headers.get("location")
+                        if status_code in REDIRECT_STATUS_CODES and location:
+                            if redirect_count == MAX_REDIRECTS:
+                                raise InvalidSubscription("subscription has too many redirects")
+                            current_url = self._redirect_url(str(logical_url), location)
+                            continue
 
-                    if not 200 <= status_code < 300:
-                        if category := _interstitial_category(body):
-                            raise V2BoardError(category, "download")
-                        if status_code in {401, 403}:
-                            raise V2BoardError(
-                                "authentication",
-                                "download",
-                                retry_auth=True,
-                            )
-                        raise V2BoardError("http_error", "download")
+                        if not 200 <= status_code < 300:
+                            if category := _interstitial_category(body):
+                                raise V2BoardError(category, "download")
+                            if status_code in {401, 403}:
+                                raise V2BoardError(
+                                    "authentication",
+                                    "download",
+                                    retry_auth=True,
+                                )
+                            raise V2BoardError("http_error", "download")
 
-                    try:
-                        validated = validate_subscription(body, self.max_bytes)
-                    except InvalidSubscription:
-                        if category := _interstitial_category(body):
-                            raise V2BoardError(category, "download") from None
-                        raise
-                    safe_headers = {
-                        key.lower(): value
-                        for key, value in headers.items()
-                        if key.lower() in SAFE_RESPONSE_HEADERS
-                    }
-                    return validated, safe_headers
+                        try:
+                            validated = validate_subscription(body, self.max_bytes)
+                        except InvalidSubscription:
+                            if category := _interstitial_category(body):
+                                raise V2BoardError(category, "download") from None
+                            raise
+                        safe_headers = {
+                            key.lower(): value
+                            for key, value in headers.items()
+                            if key.lower() in SAFE_RESPONSE_HEADERS
+                        }
+                        return validated, safe_headers
+        except TimeoutError:
+            raise InvalidSubscription("subscription download timed out") from None
         except httpx.InvalidURL:
             invalid_url = True
         if invalid_url:
@@ -435,7 +450,8 @@ class UpstreamRefresher:
             parsed.port
             url = httpx.URL(value)
             hostname = url.raw_host.decode("ascii")
-            port = url.port or 443
+            explicit_port = url.port
+            port = explicit_port or 443
         except (ValueError, httpx.InvalidURL):
             raise InvalidSubscription("subscription URL is invalid") from None
         if (
@@ -444,7 +460,7 @@ class UpstreamRefresher:
             or parsed.username is not None
             or parsed.password is not None
             or "#" in value
-            or port == 0
+            or explicit_port == 0
         ):
             raise InvalidSubscription("subscription URL is invalid")
 

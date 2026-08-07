@@ -30,6 +30,7 @@ class IntegrationService:
         self.transport = transport
         self.refresher = refresher
         self._last_auto_refresh = 0.0
+        self._auto_refresh_in_flight = False
         self.client_factory = client_factory or (
             lambda base_url, secret: OpenClashClient(base_url, secret, transport=self.transport)
         )
@@ -61,23 +62,32 @@ class IntegrationService:
             return
         if not summary.total:
             return
+        # 刷新成功后的 on_refreshed hook 会再次进入这里；用 in-flight 标志防止
+        # 在 refresh() 完成前的重入触发无限循环。
+        if self._auto_refresh_in_flight:
+            return
         now = time.monotonic()
         if now - self._last_auto_refresh < settings.health_refresh_cooldown_minutes * 60:
             return
         ratio = summary.online / summary.total
         if ratio >= settings.health_refresh_online_ratio:
             return
-        self._last_auto_refresh = now
         logger.warning(
             "node availability degraded total=%d online=%d ratio=%.2f, refreshing upstream cache",
             summary.total,
             summary.online,
             ratio,
         )
+        self._auto_refresh_in_flight = True
         try:
             await self.refresher.refresh()
         except Exception:
             logger.exception("auto refresh after degraded health failed")
+        finally:
+            # 尝试结束后再记时间戳：失败的尝试不会白占冷却窗口，
+            # 也能避免慢刷新进行期间又触发下一次自动刷新。
+            self._auto_refresh_in_flight = False
+            self._last_auto_refresh = time.monotonic()
 
     async def sync_after_refresh(self) -> None:
         settings = self.settings_store.get()
@@ -99,7 +109,9 @@ class IntegrationService:
 
     async def push_now(self) -> dict:
         settings = self.settings_store.get()
+        if not settings.openclash_enabled:
+            raise OpenClashError("openclash integration is disabled")
         client = self._client(settings)
         if client is None:
-            raise OpenClashError("openclash integration is not configured")
+            raise OpenClashError("openclash api secret is not configured")
         return await client.refresh_provider(settings.openclash_provider.strip())

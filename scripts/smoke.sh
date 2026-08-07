@@ -89,6 +89,26 @@ for _ in range(30):
 else:
     raise SystemExit("raw subscription never became ready")
 
+# 转换链路（subconverter 二进制 + 模板）也需要冒烟验证：创建允许 clash 的分享，
+# 请求 /clash/<token> 并确认产物是 YAML 且嵌入公网回源 URL。
+call(f"/api/admin/shares/{created['id']}/renew", "POST", {"days": 365}, csrf)
+clash_created = json.load(
+    call("/api/admin/shares", "POST", {"label": "smoke-clash", "days": 365, "allow_clash": True}, csrf)
+)
+clash_path = urllib.parse.urlsplit(clash_created["clash_url"]).path
+for _ in range(30):
+    try:
+        clash_payload = call(clash_path).read()
+        if b"proxies:" in clash_payload or b"proxy-providers:" in clash_payload:
+            break
+        if b"converter unavailable" in clash_payload:
+            raise SystemExit("converter unavailable")
+    except Exception:
+        time.sleep(1)
+else:
+    raise SystemExit("clash conversion never became ready")
+assert clash_payload.startswith(b"port:") or b"proxies:" in clash_payload, clash_payload[:200]
+
 call(f"/api/admin/shares/{created['id']}/revoke", "POST", {}, csrf)
 try:
     call(raw_path)

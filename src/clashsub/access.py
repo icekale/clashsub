@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections import OrderedDict, deque
 from ipaddress import ip_address, ip_network
 
@@ -55,21 +56,24 @@ class SlidingWindowLimiter:
         self.limit, self.window = limit, window_seconds
         self.max_keys = max_keys
         self.entries: OrderedDict[str, deque] = OrderedDict()
+        self._lock = threading.Lock()
 
     def allow(self, key: str, now: float) -> bool:
-        if key not in self.entries:
-            if len(self.entries) >= self.max_keys:
-                self.entries.popitem(last=False)
-            self.entries[key] = deque()
-        else:
-            self.entries.move_to_end(key)
-        values = self.entries[key]
-        while values and values[0] <= now - self.window:
-            values.popleft()
-        if len(values) >= self.limit:
-            return False
-        values.append(now)
-        return True
+        with self._lock:
+            if key not in self.entries:
+                if len(self.entries) >= self.max_keys:
+                    self.entries.popitem(last=False)
+                self.entries[key] = deque()
+            else:
+                self.entries.move_to_end(key)
+            values = self.entries[key]
+            while values and values[0] <= now - self.window:
+                values.popleft()
+            if len(values) >= self.limit:
+                return False
+            values.append(now)
+            return True
 
     def clear(self, key: str) -> None:
-        self.entries.pop(key, None)
+        with self._lock:
+            self.entries.pop(key, None)

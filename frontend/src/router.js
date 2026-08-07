@@ -18,6 +18,7 @@ const routes = [
       { path: 'shares', component: () => import('./views/Shares.vue') },
       { path: 'settings', component: () => import('./views/Settings.vue') },
       { path: 'logs', component: () => import('./views/Logs.vue') },
+      { path: ':pathMatch(.*)*', redirect: '/overview' },
     ],
   },
 ]

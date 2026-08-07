@@ -6,7 +6,13 @@ set -euo pipefail
 #   bash scripts/verify.sh [BASE_URL]
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BASE="${1:-http://127.0.0.1:18083}"
+# 默认端口从 compose 的端口映射推导（仓库模板 18080 / 部署定制 18083），
+# 避免脚本默认值与实际部署不一致。
+BASE="${1:-}"
+if [ -z "$BASE" ]; then
+  derived="$(docker compose -f "$ROOT/compose.yaml" port clashsub 8080 2>/dev/null | sed 's/.*://' || true)"
+  BASE="http://127.0.0.1:${derived:-18083}"
+fi
 fail=0
 
 check() {
@@ -46,10 +52,17 @@ username_file="$ROOT/secrets/admin_username"
 password_file="$ROOT/secrets/admin_password"
 if [ -f "$username_file" ] && [ -f "$password_file" ]; then
   username="$(cat "$username_file")"
-  password="$(printf '%s' "$(cat "$password_file")" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+  password="$(cat "$password_file")"
+  if command -v jq >/dev/null 2>&1; then
+    # jq 构造 JSON 可安全处理任意特殊字符（$、引号、反斜杠等）。
+    login_json="$(jq -n --arg u "$username" --arg p "$password" '{username:$u, password:$p}')"
+  else
+    # 兜底：仅转义 \ 与 "（双引号包裹下 $/反引号不会再被求值）。
+    login_json="{\"username\":\"$(printf '%s' "$username" | sed 's/\\/\\\\/g; s/"/\\"/g')\",\"password\":\"$(printf '%s' "$password" | sed 's/\\/\\\\/g; s/"/\\"/g')\"}"
+  fi
   login_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 -c "$jar" \
     -H 'Content-Type: application/json' \
-    -d "{\"username\":\"$username\",\"password\":\"$password\"}" \
+    -d "$login_json" \
     "$BASE/api/auth/login" || true)"
   check "admin login" "$([ "$login_code" = "200" ] && echo 1 || echo 0)" "$login_code"
   if [ "$login_code" = "200" ]; then

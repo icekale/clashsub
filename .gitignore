@@ -16,6 +16,8 @@ __pycache__/
 .coverage
 coverage.xml
 htmlcov/
+backups/
+.pi-subagents/
 frontend/node_modules/
 frontend/dist/
 .DS_Store

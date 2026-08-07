@@ -139,11 +139,14 @@ class ShareService:
         row = self.db.get_share(share_id)
         if not row or row["revoked_at"] is not None or row["expires_at"] <= time.time():
             raise KeyError("share not found")
+        base = self.settings.get().active_base_url()
+        if not base:
+            raise ValueError("active base URL is required before rotating a share")
         token = secrets.token_urlsafe(32)
         sealed = (None, None, None)
         if self.secret_store is not None and self.secret_store.available:
             sealed = self.secret_store.seal(f"share:{share_id}", token)
-        self.db.rotate_share(share_id, token_hash(token), *sealed)
+        self.db.rotate_share(share_id, token_hash(token), *sealed, base_url=base)
         return self._urls(share_id, token, row["expires_at"], bool(row["allow_clash"]))
 
     def reveal(self, share_id: str, kind: str) -> str:

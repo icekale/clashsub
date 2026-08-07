@@ -27,15 +27,32 @@ class AuthService:
 
     def __init__(self, db: Database):
         self.db, self.hasher = db, PasswordHasher()
+        self._dummy_hash = None
+
+    def _dummy_verify(self, password: str) -> None:
+        """Run an argon2 verification against a precomputed hash.
+
+        Keeps login timing roughly constant for unknown usernames so a remote
+        attacker cannot confirm which usernames exist via response time.
+        """
+        if self._dummy_hash is None:
+            self._dummy_hash = self.hasher.hash(secrets.token_urlsafe(24))
+        try:
+            self.hasher.verify(self._dummy_hash, password)
+        except VerificationError:
+            pass
 
     def bootstrap(self, username: str, password: str):
         if not username.strip() or not password:
             raise ValueError("initial credentials are required")
+        if self.db.get_admin() is not None:
+            return  # 管理员已存在，argon2 哈希只计算一次，避免每次启动重复开销。
         self.db.bootstrap_admin(username.strip(), self.hasher.hash(password), time.time())
 
     def login(self, username: str, password: str, now: float) -> LoginResult:
         admin = self.db.get_admin_by_username(username)
         if not admin:
+            self._dummy_verify(password)
             raise PermissionError("invalid credentials")
         try:
             self.hasher.verify(admin["password_hash"], password)

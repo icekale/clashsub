@@ -28,8 +28,23 @@ class CacheFiles:
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, target)
+            self._fsync_directory(target.parent)
         finally:
             temporary.unlink(missing_ok=True)
+
+    @staticmethod
+    def _fsync_directory(directory: Path) -> None:
+        """fsync 目录本身，确保 os.replace 的重命名在断电后仍然持久。"""
+        try:
+            descriptor = os.open(directory, os.O_RDONLY)
+        except OSError:
+            return
+        try:
+            os.fsync(descriptor)
+        except OSError:
+            pass
+        finally:
+            os.close(descriptor)
 
     def publish_raw(self, payload: bytes, safe_headers: dict[str, str]) -> str:
         digest = hashlib.sha256(payload).hexdigest()
@@ -40,7 +55,11 @@ class CacheFiles:
 
     def read_raw(self, digest: str) -> RawSnapshot:
         payload = (self.root / "raw" / f"{digest}.bin").read_bytes()
-        headers = json.loads((self.root / "raw" / f"{digest}.json").read_text(encoding="utf-8"))
+        try:
+            headers = json.loads((self.root / "raw" / f"{digest}.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            # 元数据文件缺失/损坏不影响订阅内容本身，降级为空头。
+            headers = {}
         return RawSnapshot(payload, headers)
 
     def prune_raw(self, keep_digests: set[str], max_keep: int = 3) -> None:

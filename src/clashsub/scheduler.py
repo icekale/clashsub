@@ -28,7 +28,12 @@ class RefreshScheduler:
             if self._wake.is_set():
                 continue
             try:
-                await asyncio.wait_for(self._wake.wait(), timeout=self.delay_seconds())
+                delay = self.delay_seconds()
+            except Exception as exc:
+                self._logger.error("scheduler delay computation failed: %s", type(exc).__name__)
+                delay = 3600
+            try:
+                await asyncio.wait_for(self._wake.wait(), timeout=delay)
             except asyncio.TimeoutError:
                 pass
 

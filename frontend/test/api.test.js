@@ -66,4 +66,19 @@ describe('API client', () => {
     await expect(api.request('/api/admin/shares', { method: 'POST', body: {} })).rejects.toThrow('invalid CSRF token')
     expect(calls.filter(([u]) => u === '/api/admin/shares')).toHaveLength(2)
   })
+
+  it('403 retry with a dead session notifies the session layer', async () => {
+    let expired = false
+    const fetchImpl = async (url, options) => {
+      if (url === '/api/auth/session') {
+        return { ok: false, status: 401, json: async () => ({ detail: 'unauthorized' }) }
+      }
+      return { ok: false, status: 403, json: async () => ({ detail: 'invalid CSRF token' }) }
+    }
+    const api = createApiClient(fetchImpl, () => { expired = true })
+    api.setCsrf('stale-token')
+    await expect(api.request('/api/admin/shares', { method: 'POST', body: {} })).rejects.toThrow('invalid CSRF token')
+    expect(expired).toBe(true)
+    expect(api.getCsrf()).toBe('')
+  })
 })

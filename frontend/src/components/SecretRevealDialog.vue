@@ -96,7 +96,7 @@ watch(
           <h2 id="secret-dialog-title">分享链接</h2>
           <p id="secret-dialog-warning">链接在有效期内可以从分享记录中再次查看。</p>
         </div>
-        <n-button ref="closeButton" quaternary aria-label="关闭一次性链接" @click="close">关闭</n-button>
+        <n-button ref="closeButton" quaternary aria-label="关闭链接窗口" @click="close">关闭</n-button>
       </div>
 
       <div class="secret-field">

@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 import json
 from dataclasses import asdict
-from typing import Literal
+from typing import Literal, NoReturn
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
@@ -15,7 +15,7 @@ from ..integration import OPENCLASH_SECRET_NAME
 from ..openclash_client import OpenClashClient, OpenClashError
 from ..secret_store import SecretStoreUnavailable
 from ..settings import RuntimeSettings, validate_http_origin
-from .auth import COOKIE_NAME
+from .auth import COOKIE_NAME, _delete_session_cookie
 
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -91,7 +91,7 @@ def require_admin(request: Request, require_csrf: bool = False):
     return session
 
 
-def _missing_share(exc: KeyError):
+def _missing_share(exc: KeyError) -> NoReturn:
     raise HTTPException(404, "share not found") from exc
 
 
@@ -175,6 +175,8 @@ def rotate_share(share_id: str, request: Request):
         created = _services(request).shares.rotate(share_id)
     except KeyError as exc:
         _missing_share(exc)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     logger.info("share rotated id=%s", share_id)
     return asdict(created)
 
@@ -256,7 +258,7 @@ def update_settings(payload: RuntimeSettingsRequest, request: Request):
         services.db.delete_all_sessions()
     response = JSONResponse({**asdict(updated), "reauthenticate": reauthenticate})
     if reauthenticate:
-        response.delete_cookie(COOKIE_NAME, path="/", samesite="strict")
+        _delete_session_cookie(response, request)
     return response
 
 

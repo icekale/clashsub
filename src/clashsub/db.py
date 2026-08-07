@@ -122,18 +122,28 @@ class Database:
         with self.connect() as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.executescript(SCHEMA)
-            columns = {row["name"] for row in conn.execute("PRAGMA table_info(runtime_state)")}
-            for name, statement in RUNTIME_STATE_MIGRATIONS:
-                if name not in columns:
-                    conn.execute(statement)
-            share_columns = {row["name"] for row in conn.execute("PRAGMA table_info(shares)")}
-            for name, statement in SHARE_MIGRATIONS:
-                if name not in share_columns:
-                    conn.execute(statement)
-            session_columns = {row["name"] for row in conn.execute("PRAGMA table_info(sessions)")}
-            for name, statement in SESSION_MIGRATIONS:
-                if name not in session_columns:
-                    conn.execute(statement)
+            # 迁移必须串行化：读列名 + ALTER 在 BEGIN IMMEDIATE 里原子执行，
+            # 并发初始化（例如 migrate CLI 与应用同时启动）的后者会阻塞后重读列名，
+            # 而不是在同一列上重复 ALTER 而崩溃。
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                columns = {row["name"] for row in conn.execute("PRAGMA table_info(runtime_state)")}
+                for name, statement in RUNTIME_STATE_MIGRATIONS:
+                    if name not in columns:
+                        conn.execute(statement)
+                        columns.add(name)
+                columns = {row["name"] for row in conn.execute("PRAGMA table_info(shares)")}
+                for name, statement in SHARE_MIGRATIONS:
+                    if name not in columns:
+                        conn.execute(statement)
+                        columns.add(name)
+                columns = {row["name"] for row in conn.execute("PRAGMA table_info(sessions)")}
+                for name, statement in SESSION_MIGRATIONS:
+                    if name not in columns:
+                        conn.execute(statement)
+                        columns.add(name)
+            finally:
+                conn.execute("COMMIT")
 
     @contextmanager
     def transaction(self):
@@ -235,8 +245,8 @@ class Database:
                     token_hash,
                     created_at,
                     expires_at,
-                    int(allow_raw),
-                    int(allow_clash),
+                    1 if allow_raw else 0,
+                    1 if allow_clash else 0,
                     token_version,
                     token_nonce,
                     token_ciphertext,
@@ -271,12 +281,13 @@ class Database:
         token_version: int | None = None,
         token_nonce: bytes | None = None,
         token_ciphertext: bytes | None = None,
+        base_url: str | None = None,
     ):
         with self.transaction() as conn:
             conn.execute(
                 """UPDATE shares SET token_hash=?, token_version=?, token_nonce=?,
-                   token_ciphertext=? WHERE id=?""",
-                (token_hash, token_version, token_nonce, token_ciphertext, share_id),
+                   token_ciphertext=?, base_url=? WHERE id=?""",
+                (token_hash, token_version, token_nonce, token_ciphertext, base_url, share_id),
             )
 
     def delete_share(self, share_id: str):

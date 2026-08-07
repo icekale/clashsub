@@ -70,6 +70,38 @@ def test_restore_session_keeps_csrf_stable_across_tabs(client):
     ).status_code == 201
 
 
+def test_admin_api_responses_are_not_cached(client):
+    csrf = login(client)
+    for path in ("/api/admin/overview", "/api/admin/shares", "/api/auth/session"):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert response.headers.get("cache-control") == "no-store"
+    # 登录响应同样包含 CSRF 令牌，不应被缓存。
+    login_response = client.post(
+        "/api/auth/login",
+        json={"username": "initial-user", "password": "initial-password"},
+    )
+    assert login_response.headers.get("cache-control") == "no-store"
+
+
+def test_rotate_share_returns_400_when_no_active_base_url(client):
+    csrf = login(client)
+    created = client.post(
+        "/api/admin/shares",
+        headers={"X-CSRF-Token": csrf},
+        json={"label": "friend", "days": 365, "allow_clash": False},
+    ).json()
+    # 清空两个 base URL 后轮换应返回 400（而不是 500）。
+    current = client.get("/api/admin/settings").json()
+    cleared = {**current, "lan_base_url": "", "public_base_url": ""}
+    assert client.put("/api/admin/settings", headers={"X-CSRF-Token": csrf}, json=cleared).status_code == 200
+    response = client.post(
+        f"/api/admin/shares/{created['id']}/rotate",
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert response.status_code == 400
+
+
 def test_public_mode_requires_acknowledgement_and_logs_out(client):
     csrf = login(client)
     payload = {

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useMessage } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -19,6 +19,16 @@ const menuOptions = [
   { label: '运行日志', key: '/logs' },
 ]
 const activeKey = computed(() => menuOptions.find((item) => route.path.startsWith(item.key))?.key || '/overview')
+
+// 会话在别处失效（改密、全部会话被清）时立即回到登录页，而不是停留在过期页面。
+watch(
+  () => session.authenticated,
+  (authenticated) => {
+    if (!authenticated && route.path !== '/login') {
+      router.replace({ path: '/login', query: { next: route.fullPath } })
+    }
+  },
+)
 
 function navigate(key) {
   drawerOpen.value = false
