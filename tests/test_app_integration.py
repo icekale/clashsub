@@ -70,6 +70,43 @@ def test_spa_history_fallback_requires_lan_access(app_settings):
         assert client.get("/app/login").status_code == 404
 
 
+def test_spa_assets_are_served_with_immutable_cache_and_reject_traversal(app_settings):
+    app_settings.frontend_dir.mkdir(parents=True)
+    assets = app_settings.frontend_dir / "assets"
+    assets.mkdir(parents=True)
+    (assets / "app-abc123.js").write_text("console.log('app')", encoding="utf-8")
+    app_settings.frontend_dir.joinpath("index.html").write_text(
+        "<!doctype html><title>ClashSub test UI</title>",
+        encoding="utf-8",
+    )
+    # A decoy outside the frontend dir proves the route stays contained.
+    outside = app_settings.data_dir.parent / "secret.txt"
+    outside.write_text("top-secret", encoding="utf-8")
+
+    with TestClient(
+        create_app(app_settings, start_scheduler=False),
+        client=("192.168.1.20", 50000),
+    ) as client:
+        index = client.get("/app/")
+        assert index.status_code == 200
+        assert index.headers["cache-control"] == "no-cache"
+        asset = client.get("/app/assets/app-abc123.js")
+        assert asset.status_code == 200
+        assert asset.headers["cache-control"] == "public, max-age=31536000, immutable"
+        # Encoded-dot / encoded-slash traversals must never escape the assets dir.
+        # (Plain .. segments are normalized away by clients/servers before routing.)
+        for traversal in (
+            "/app/assets/..%2f..%2fsecret.txt",
+            "/app/assets/..%2f..%2f..%2f..%2fsecret.txt",
+            "/app/assets/%2e%2e/%2e%2e/secret.txt",
+            "/app/assets/%2e%2e%2f%2e%2e%2fsecret.txt",
+            "/app/assets/..%5c..%5csecret.txt",
+        ):
+            response = client.get(traversal)
+            assert response.status_code == 404, f"traversal not blocked: {traversal}"
+            assert "top-secret" not in response.text
+
+
 def test_share_format_paths_require_lan_access_when_public_mode_is_off(app_settings):
     with TestClient(
         create_app(app_settings, start_scheduler=False),

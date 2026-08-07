@@ -227,8 +227,11 @@ def create_app(
     @app.get("/app/{path:path}", include_in_schema=False)
     def spa(path: str = ""):
         if path.startswith("assets/"):
-            asset = config.frontend_dir / path
-            if not asset.is_file():
+            # 必须校验最终路径仍位于 frontend 目录内：编码的 ..（如 ..%2f）会绕过
+            # 前置的字符串前缀检查，解析到目录外任意文件（未认证可读 docker secrets）。
+            root = config.frontend_dir.resolve()
+            asset = (root / path).resolve()
+            if not asset.is_relative_to(root) or not asset.is_file():
                 raise HTTPException(404, "asset not found")
             # 内容指纹文件名永久不变，可安全长期缓存。
             return FileResponse(asset, headers={"Cache-Control": "public, max-age=31536000, immutable"})
