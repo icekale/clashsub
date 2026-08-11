@@ -1,6 +1,20 @@
 export function createApiClient(fetchImpl = fetch, onUnauthorized = () => {}) {
   let csrf = ''
 
+  // 反代/网络异常时请求可能无限挂起；限时后转为可见错误，而不是页面永远空白等待。
+  async function fetchWithTimeout(path, init) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 20000)
+    try {
+      return await fetchImpl(path, { ...init, signal: controller.signal })
+    } catch (error) {
+      if (error?.name === 'AbortError') throw new Error('请求超时，请重试')
+      throw error
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   return {
     setCsrf(value) { csrf = value || '' },
     getCsrf() { return csrf },
@@ -14,7 +28,7 @@ export function createApiClient(fetchImpl = fetch, onUnauthorized = () => {}) {
       if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && csrf) {
         headers['X-CSRF-Token'] = csrf
       }
-      const response = await fetchImpl(path, {
+      const response = await fetchWithTimeout(path, {
         ...options,
         method,
         credentials: 'same-origin',
@@ -29,7 +43,7 @@ export function createApiClient(fetchImpl = fetch, onUnauthorized = () => {}) {
       if (!response.ok) {
         // 403 + 已携带 CSRF：令牌可能已被其他标签页/重新登录轮换，重新同步一次并重试。
         if (response.status === 403 && csrf && !options.__csrfRetried) {
-          const sessionResponse = await fetchImpl('/api/auth/session', {
+          const sessionResponse = await fetchWithTimeout('/api/auth/session', {
             method: 'GET',
             credentials: 'same-origin',
           })

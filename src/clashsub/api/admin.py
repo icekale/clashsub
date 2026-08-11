@@ -124,10 +124,15 @@ def overview(request: Request):
 def list_shares(request: Request):
     require_admin(request)
     now = time.time()
-    return [
-        {**asdict(item), "expired": item.expires_at <= now}
-        for item in _services(request).shares.list()
-    ]
+    services = _services(request)
+    result = []
+    for item in services.shares.list():
+        record = {**asdict(item), "expired": item.expires_at <= now}
+        if item.recoverable and not item.revoked and not record["expired"]:
+            # 链接直接随列表返回：页面显示已有链接不再依赖额外的 reveal POST。
+            record["urls"] = services.shares.urls_for(item.id)
+        result.append(record)
+    return result
 
 
 @router.post("/shares", status_code=201)

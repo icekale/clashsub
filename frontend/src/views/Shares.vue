@@ -168,7 +168,14 @@ async function load() {
     await Promise.allSettled(
       items.value
         .filter((item) => item.recoverable && !item.revoked && !item.expired)
-        .map(fetchAllLinks),
+        .map(async (item) => {
+          // 列表接口直接带回了已有链接，避免依赖逐个 reveal 请求（在部分反代路径下会静默挂起）。
+          if (item.urls && Object.keys(item.urls).length) {
+            revealedLinks[item.id] = { ...item.urls }
+          } else {
+            await fetchAllLinks(item)
+          }
+        }),
     )
   } catch (requestError) {
     error.value = requestError.message

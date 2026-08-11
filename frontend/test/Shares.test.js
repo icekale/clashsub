@@ -107,6 +107,29 @@ describe('Shares', () => {
     expect(wrapper.text()).toContain('/raw/stable-token')
   })
 
+  it('shows existing links straight from the list response without reveal POSTs', async () => {
+    api.request.mockResolvedValueOnce([{
+      ...summary,
+      allow_clash: true,
+      recoverable: true,
+      urls: {
+        raw: 'https://sub.example.com/raw/inline-token',
+        clash: 'https://sub.example.com/clash/inline-token',
+        surge: 'https://sub.example.com/surge/inline-token',
+        loon: 'https://sub.example.com/loon/inline-token',
+        smart: 'https://sub.example.com/smart/inline-token',
+      },
+    }])
+    const wrapper = mountShares()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('/raw/inline-token')
+    expect(wrapper.text()).toContain('/smart/inline-token')
+    // 只有列表请求本身，不触发任何 reveal POST。
+    expect(api.request).toHaveBeenCalledTimes(1)
+    expect(buttonWithText(wrapper, '重新获取链接')).toBeTruthy()
+  })
+
   it('reveals an existing raw link through the CSRF-protected endpoint', async () => {
     api.request
       .mockResolvedValueOnce([{ ...summary, recoverable: true }])

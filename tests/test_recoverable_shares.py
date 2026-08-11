@@ -72,6 +72,44 @@ def test_rotate_raises_value_error_when_no_active_base_url(tmp_path):
         shares.rotate(created.id)
 
 
+def test_admin_list_carries_existing_urls_without_reveal_posts(app_settings, tmp_path):
+    """列表接口直接带回已有链接，页面显示不再依赖逐个 reveal 请求。"""
+    settings = replace(app_settings, encryption_key_file=_key_file(tmp_path))
+    with TestClient(create_app(settings), client=("127.0.0.1", 50000)) as client:
+        login = client.post(
+            "/api/auth/login",
+            json={"username": "initial-user", "password": "initial-password"},
+        )
+        csrf = login.json()["csrf_token"]
+        client.app.state.services.runtime_settings.update(
+            RuntimeSettings(lan_base_url="https://share.example.test")
+        )
+        created = client.post(
+            "/api/admin/shares",
+            headers={"X-CSRF-Token": csrf},
+            json={"label": "friend", "allow_clash": True},
+        ).json()
+
+        listed = client.get("/api/admin/shares").json()
+        assert listed[0]["urls"] == {
+            "raw": created["raw_url"],
+            "clash": created["clash_url"],
+            "surge": created["surge_url"],
+            "loon": created["loon_url"],
+            "smart": created["smart_url"],
+        }
+
+        # 撤销后不再携带 urls。
+        assert (
+            client.post(
+                f"/api/admin/shares/{created['id']}/revoke",
+                headers={"X-CSRF-Token": csrf},
+            ).status_code
+            == 204
+        )
+        assert "urls" not in client.get("/api/admin/shares").json()[0]
+
+
 def test_reveal_endpoint_is_csrf_protected_and_reusable(app_settings, tmp_path):
     settings = replace(app_settings, encryption_key_file=_key_file(tmp_path))
     with TestClient(create_app(settings), client=("127.0.0.1", 50000)) as client:
