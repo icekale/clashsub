@@ -45,7 +45,7 @@ async def test_converter_uses_target_and_keeps_format_caches_isolated(tmp_path):
     assert (tmp_path / "converted" / f"{share_id}-loon.conf").exists()
 
 
-def test_smart_route_uses_user_agent_and_unknown_returns_raw(app_settings):
+def test_smart_route_uses_user_agent_and_returns_raw_for_shadowrocket_or_unknown(app_settings):
     raw_urls = []
 
     def handler(request):
@@ -86,7 +86,7 @@ def test_smart_route_uses_user_agent_and_unknown_returns_raw(app_settings):
     assert "[Proxy]" in loon.text
     assert "proxy-providers" in clash.text
     assert "proxy-providers" in stash.text
-    assert "proxy-providers" in shadowrocket.text
+    assert shadowrocket.content == b"raw-clash-yaml"
     assert f"http://testserver/raw/{token}" in clash.text
     assert "http://clashsub:8080/raw/" not in clash.text
     assert unknown.content == b"raw-clash-yaml"

@@ -209,7 +209,7 @@ async def smart_subscription(token: str, request: Request):
         return await _converted_subscription(token, request, "loon")
     if any(
         marker in user_agent
-        for marker in ("clash", "mihomo", "openclash", "stash", "karing", "shadowrocket")
+        for marker in ("clash", "mihomo", "openclash", "stash", "karing")
     ):
         return await _converted_subscription(token, request, "clash")
     _allow_request(request, "share")
