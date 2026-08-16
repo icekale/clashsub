@@ -102,3 +102,5 @@ def test_backup_script_exists_with_safe_snapshot_flow():
     assert "sqlite3" in script and ".backup" in script
     assert "verify.sh" in script
     assert "state.db" in script
+    assert "18083" not in script
+    assert 'verify.sh" "${1:-http://' not in script

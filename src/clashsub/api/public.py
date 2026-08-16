@@ -36,6 +36,24 @@ def _allow_request(request: Request, scope: str):
         raise HTTPException(429, "too many requests")
 
 
+def _rewrite_proxy_groups(document: dict, proxies: list) -> None:
+    groups = document.get("proxy-groups")
+    if not isinstance(groups, list):
+        return
+    keep = {str(proxy.get("name", "")).strip() for proxy in proxies if isinstance(proxy, dict)}
+    keep.update(
+        str(group.get("name", "")).strip()
+        for group in groups
+        if isinstance(group, dict)
+    )
+    keep.update({"DIRECT", "REJECT", "PASS", "COMPATIBLE"})
+    keep.discard("")
+    for group in groups:
+        members = group.get("proxies") if isinstance(group, dict) else None
+        if isinstance(members, list):
+            group["proxies"] = [name for name in members if str(name).strip() in keep]
+
+
 def _is_loopback(address: str) -> bool:
     try:
         return ip_address(address).is_loopback
@@ -126,6 +144,7 @@ async def ha_subscription(token: str, request: Request):
         if str(proxy.get("name", "")).strip() not in recent_unhealthy
     ]
     document["proxies"] = filtered
+    _rewrite_proxy_groups(document, filtered)
     body = await asyncio.to_thread(yaml.safe_dump, document, allow_unicode=True, sort_keys=False)
     headers = {"Cache-Control": "no-store"}
     try:

@@ -18,7 +18,8 @@ from .events import get_logger
 
 logger = get_logger("health")
 
-TLS_PROTOCOLS = {"trojan", "vless", "anytls", "hysteria2", "hy2", "tuic", "wireguard"}
+TLS_PROTOCOLS = {"trojan", "vless", "anytls"}
+UDP_PROTOCOLS = {"hysteria2", "hy2", "tuic", "wireguard"}
 DOH_URL = "https://223.5.5.5/resolve"
 
 Resolver = Callable[[str, int], Awaitable[Sequence[str]]]
@@ -147,6 +148,8 @@ class NodeHealthChecker:
                 return None
             name = str(proxy.get("name", "")).strip()
             if not name:
+                return None
+            if str(proxy.get("type", "")).strip().lower() in UDP_PROTOCOLS:
                 return None
             try:
                 server = str(proxy["server"]).strip()

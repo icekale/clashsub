@@ -4,7 +4,7 @@ import { useMessage } from 'naive-ui'
 
 import { api } from '../api.js'
 import SecretRevealDialog from '../components/SecretRevealDialog.vue'
-import { buildShareRequest, statusLabel } from '../shareView.js'
+import { buildShareRequest, CLASH_SHARE_KINDS, kindLabel, statusLabel } from '../shareView.js'
 
 
 const message = useMessage()
@@ -19,7 +19,7 @@ const renewDays = ref(365)
 const revealedLinks = reactive({})
 const linkErrors = reactive({})
 const form = reactive({ label: '', days: 365, allowRaw: true, allowClash: false })
-const reveal = reactive({ show: false, rawUrl: '', clashUrl: '', surgeUrl: '', loonUrl: '', smartUrl: '' })
+const reveal = reactive({ show: false, rawUrl: '', clashUrl: '', clashHaUrl: '', surgeUrl: '', loonUrl: '', smartUrl: '' })
 
 watch(
   () => form.allowClash,
@@ -46,6 +46,7 @@ function showOneTimeLinks(payload) {
     show: true,
     rawUrl: payload.raw_url,
     clashUrl: payload.clash_url || '',
+    clashHaUrl: payload.clash_ha_url || '',
     surgeUrl: payload.surge_url || '',
     loonUrl: payload.loon_url || '',
     smartUrl: payload.smart_url || '',
@@ -62,6 +63,7 @@ async function revealExisting(item, kind) {
     reveal.show = true
     reveal.rawUrl = kind === 'raw' ? result.url : ''
     reveal.clashUrl = kind === 'clash' ? result.url : ''
+    reveal.clashHaUrl = kind === 'clash-ha' ? result.url : ''
     reveal.surgeUrl = kind === 'surge' ? result.url : ''
     reveal.loonUrl = kind === 'loon' ? result.url : ''
     reveal.smartUrl = kind === 'smart' ? result.url : ''
@@ -77,6 +79,7 @@ function setRevealVisibility(visible) {
   if (!visible) {
     reveal.rawUrl = ''
     reveal.clashUrl = ''
+    reveal.clashHaUrl = ''
     reveal.surgeUrl = ''
     reveal.loonUrl = ''
     reveal.smartUrl = ''
@@ -95,7 +98,7 @@ function clearRevealedLinks(shareId) {
 
 async function fetchAllLinks(item) {
   const kinds = item.allow_clash
-    ? ['raw', 'clash', 'surge', 'loon', 'smart']
+    ? CLASH_SHARE_KINDS
     : item.allow_raw ? ['raw'] : []
   const results = await Promise.allSettled(kinds.map(async (kind) => [
     kind,
@@ -320,7 +323,7 @@ load()
 
         <div v-if="revealedLinks[item.id]" class="historical-links" :data-testid="`historical-links-${item.id}`">
           <div v-for="(url, kind) in revealedLinks[item.id]" :key="kind" class="historical-link-row">
-            <span class="historical-link-kind">{{ kind === 'raw' ? '原始' : kind === 'clash' ? 'Clash' : kind === 'surge' ? 'Surge' : kind === 'loon' ? 'Loon' : '智能' }}</span>
+            <span class="historical-link-kind">{{ kindLabel(kind) }}</span>
             <code>{{ url }}</code>
             <n-button text size="small" @click="copyLink(url)">复制</n-button>
           </div>
@@ -365,6 +368,14 @@ load()
             :loading="actionKey === `${item.id}:reveal:clash`"
             @click="revealExisting(item, 'clash')"
           >查看 Clash 链接</n-button>
+          <n-button
+            v-if="item.allow_clash"
+            secondary
+            size="small"
+            :disabled="item.revoked || item.expired || !item.recoverable"
+            :loading="actionKey === `${item.id}:reveal:clash-ha`"
+            @click="revealExisting(item, 'clash-ha')"
+          >查看健康节点链接</n-button>
           <n-button
             v-if="item.allow_clash"
             secondary
@@ -440,6 +451,7 @@ load()
     :show="reveal.show"
     :raw-url="reveal.rawUrl"
     :clash-url="reveal.clashUrl"
+    :clash-ha-url="reveal.clashHaUrl"
     :surge-url="reveal.surgeUrl"
     :loon-url="reveal.loonUrl"
     :smart-url="reveal.smartUrl"

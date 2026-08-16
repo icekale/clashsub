@@ -115,6 +115,7 @@ describe('Shares', () => {
       urls: {
         raw: 'https://sub.example.com/raw/inline-token',
         clash: 'https://sub.example.com/clash/inline-token',
+        'clash-ha': 'https://sub.example.com/clash-ha/inline-token',
         surge: 'https://sub.example.com/surge/inline-token',
         loon: 'https://sub.example.com/loon/inline-token',
         smart: 'https://sub.example.com/smart/inline-token',
@@ -153,6 +154,7 @@ describe('Shares', () => {
       .mockResolvedValueOnce([{ ...summary, allow_clash: true, recoverable: true }])
       .mockResolvedValueOnce({ url: 'https://sub.example.com/raw/history' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/clash/history' })
+      .mockResolvedValueOnce({ url: 'https://sub.example.com/clash-ha/history' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/surge/history' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/loon/history' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/smart/history' })
@@ -161,6 +163,7 @@ describe('Shares', () => {
 
     expect(wrapper.text()).toContain('https://sub.example.com/raw/history')
     expect(wrapper.text()).toContain('https://sub.example.com/clash/history')
+    expect(wrapper.text()).toContain('https://sub.example.com/clash-ha/history')
     expect(wrapper.text()).toContain('https://sub.example.com/surge/history')
     expect(wrapper.text()).toContain('https://sub.example.com/loon/history')
     expect(wrapper.text()).toContain('https://sub.example.com/smart/history')
@@ -171,6 +174,7 @@ describe('Shares', () => {
       .mockResolvedValueOnce([{ ...summary, allow_clash: true, recoverable: true }])
       .mockResolvedValueOnce({ url: 'https://sub.example.com/raw/history' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/clash/history' })
+      .mockResolvedValueOnce({ url: 'https://sub.example.com/clash-ha/history' })
       .mockRejectedValueOnce(new Error('surge unavailable'))
       .mockResolvedValueOnce({ url: 'https://sub.example.com/loon/history' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/smart/history' })
@@ -190,6 +194,7 @@ describe('Shares', () => {
       .mockResolvedValueOnce([{ ...summary, allow_clash: true, recoverable: true }])
       .mockRejectedValueOnce(new Error('raw unavailable'))
       .mockRejectedValueOnce(new Error('clash unavailable'))
+      .mockRejectedValueOnce(new Error('clash-ha unavailable'))
       .mockRejectedValueOnce(new Error('surge unavailable'))
       .mockRejectedValueOnce(new Error('loon unavailable'))
       .mockRejectedValueOnce(new Error('smart unavailable'))
@@ -205,11 +210,13 @@ describe('Shares', () => {
       .mockResolvedValueOnce([{ ...summary, allow_clash: true, recoverable: true }])
       .mockResolvedValueOnce({ url: 'https://sub.example.com/raw/history' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/clash/history' })
+      .mockResolvedValueOnce({ url: 'https://sub.example.com/clash-ha/history' })
       .mockRejectedValueOnce(new Error('surge unavailable'))
       .mockResolvedValueOnce({ url: 'https://sub.example.com/loon/history' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/smart/history' })
       .mockRejectedValueOnce(new Error('raw unavailable'))
       .mockRejectedValueOnce(new Error('clash unavailable'))
+      .mockRejectedValueOnce(new Error('clash-ha unavailable'))
       .mockResolvedValueOnce({ url: 'https://sub.example.com/surge/history' })
       .mockRejectedValueOnce(new Error('loon unavailable'))
       .mockRejectedValueOnce(new Error('smart unavailable'))
@@ -241,12 +248,14 @@ describe('Shares', () => {
       .mockResolvedValueOnce([{ ...summary, allow_clash: true, recoverable: true }])
       .mockResolvedValueOnce({ url: 'https://sub.example.com/raw/history' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/clash/history' })
+      .mockResolvedValueOnce({ url: 'https://sub.example.com/clash-ha/history' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/surge/history' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/loon/history' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/smart/history' })
       .mockResolvedValueOnce([{ ...summary, allow_clash: true, recoverable: true }])
       .mockResolvedValueOnce({ url: 'https://sub.example.com/raw/refreshed' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/clash/refreshed' })
+      .mockResolvedValueOnce({ url: 'https://sub.example.com/clash-ha/refreshed' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/surge/refreshed' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/loon/refreshed' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/smart/refreshed' })

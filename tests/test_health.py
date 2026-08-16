@@ -87,6 +87,33 @@ async def test_health_check_skips_non_dict_proxy_entries(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_health_check_skips_udp_only_protocols(tmp_path):
+    db = Database(tmp_path / "state.db")
+    db.initialize()
+    cache = CacheFiles(tmp_path / "cache")
+    payload = (
+        "proxies:\n"
+        "  - {name: hy2, type: hysteria2, server: 127.0.0.1, port: 1, password: pass}\n"
+        "  - {name: tuic, type: tuic, server: 127.0.0.1, port: 1, uuid: id, password: pass}\n"
+        "  - {name: wg, type: wireguard, server: 127.0.0.1, port: 1}\n"
+        "  - {name: ss, type: ss, server: 127.0.0.1, port: 1}\n"
+    ).encode()
+    digest = cache.publish_raw(payload, {})
+    db.record_refresh_success(digest, 4, "yaml", {}, time.time(), "test")
+
+    async def resolver(hostname, port):
+        return ("127.0.0.1",)
+
+    checker = NodeHealthChecker(db, cache, resolver=resolver, timeout_seconds=1)
+    summary = await checker.run_once()
+
+    assert summary.total == 1
+    rows = {row["name"]: row for row in db.list_node_health()}
+    assert set(rows) == {"ss"}
+    assert rows["ss"]["ok"] == 0
+
+
+@pytest.mark.asyncio
 async def test_doh_resolver_extracts_a_records():
     def handler(request):
         return httpx.Response(

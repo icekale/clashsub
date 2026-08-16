@@ -34,6 +34,8 @@ def test_clash_permission_implies_raw_and_token_is_one_time(service):
     row = db.get_share(created.id)
     assert row["allow_raw"] == 1 and row["allow_clash"] == 1
     assert created.clash_url is not None
+    token = created.raw_url.rsplit("/", 1)[1]
+    assert created.clash_ha_url == f"http://192.168.1.28:18080/clash-ha/{token}"
     assert not hasattr(shares.list()[0], "token")
 
 
@@ -52,8 +54,14 @@ def test_public_converted_share_keeps_format_urls_on_its_own_origin(tmp_path):
 
     created = shares.create("friend", allow_clash=True)
 
-    for kind, url in (("clash", created.clash_url), ("surge", created.surge_url), ("loon", created.loon_url)):
-        assert url == f"https://share.example.test/{kind}/{created.raw_url.rsplit('/', 1)[1]}"
+    token = created.raw_url.rsplit("/", 1)[1]
+    for kind, url in (
+        ("clash", created.clash_url),
+        ("clash-ha", created.clash_ha_url),
+        ("surge", created.surge_url),
+        ("loon", created.loon_url),
+    ):
+        assert url == f"https://share.example.test/{kind}/{token}"
         assert "converter.example.test" not in url
         assert "url=" not in url
 

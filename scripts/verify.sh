@@ -6,12 +6,11 @@ set -euo pipefail
 #   bash scripts/verify.sh [BASE_URL]
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# 默认端口从 compose 的端口映射推导（仓库模板 18080 / 部署定制 18083），
-# 避免脚本默认值与实际部署不一致。
+# 默认端口从 compose 的端口映射推导，推导失败时回落到仓库模板 18080。
 BASE="${1:-}"
 if [ -z "$BASE" ]; then
   derived="$(docker compose -f "$ROOT/compose.yaml" port clashsub 8080 2>/dev/null | sed 's/.*://' || true)"
-  BASE="http://127.0.0.1:${derived:-18083}"
+  BASE="http://127.0.0.1:${derived:-18080}"
 fi
 fail=0
 

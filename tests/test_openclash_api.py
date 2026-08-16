@@ -214,6 +214,7 @@ def test_clash_ha_filters_recently_failed_nodes(tmp_path):
         document = yaml.safe_load(response.content)
         names = [proxy["name"] for proxy in document["proxies"]]
         assert names == ["OK Node"]
+        assert document["proxy-groups"][0]["proxies"] == ["OK Node"]
 
 
 def test_clash_ha_uses_short_freshness_window_for_frequent_checks(tmp_path):

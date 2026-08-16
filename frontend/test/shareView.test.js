@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildShareRequest, statusLabel } from '../src/shareView.js'
+import { buildShareRequest, kindLabel, statusLabel } from '../src/shareView.js'
 
 
 describe('share view helpers', () => {
@@ -11,6 +11,11 @@ describe('share view helpers', () => {
       allow_raw: true,
       allow_clash: true,
     })
+  })
+
+  it('labels clash-ha as health-filtered, not smart UA routing', () => {
+    expect(kindLabel('clash-ha')).toBe('健康节点')
+    expect(kindLabel('smart')).toBe('智能')
   })
 
   it('status is not conveyed by color alone', () => {

@@ -7,6 +7,7 @@ const props = defineProps({
   show: { type: Boolean, required: true },
   rawUrl: { type: String, required: true },
   clashUrl: { type: String, default: '' },
+  clashHaUrl: { type: String, default: '' },
   surgeUrl: { type: String, default: '' },
   loonUrl: { type: String, default: '' },
   smartUrl: { type: String, default: '' },
@@ -15,6 +16,7 @@ const emit = defineEmits(['update:show'])
 const dialog = ref(null)
 const rawField = ref(null)
 const clashField = ref(null)
+const clashHaField = ref(null)
 const surgeField = ref(null)
 const loonField = ref(null)
 const smartField = ref(null)
@@ -128,6 +130,22 @@ watch(
         <div class="secret-field-actions">
           <n-button secondary @click="selectField(clashField)">选择文本</n-button>
           <n-button type="primary" @click="copy(clashUrl, clashField)">复制转换链接</n-button>
+        </div>
+      </div>
+
+      <div v-if="clashHaUrl" class="secret-field">
+        <label for="subscription-clash-ha-url">仅健康节点</label>
+        <textarea
+          id="subscription-clash-ha-url"
+          ref="clashHaField"
+          :value="clashHaUrl"
+          readonly
+          rows="3"
+          @focus="$event.target.select()"
+        />
+        <div class="secret-field-actions">
+          <n-button secondary @click="selectField(clashHaField)">选择文本</n-button>
+          <n-button type="primary" @click="copy(clashHaUrl, clashHaField)">复制健康节点链接</n-button>
         </div>
       </div>
 

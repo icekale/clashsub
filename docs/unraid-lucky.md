@@ -99,9 +99,9 @@ DOWNLOAD_ALLOWED_CIDRS: "198.18.0.0/15"
 
 1. 先为准备好的二级域名签发并启用 HTTPS 证书。
 2. 新建该域名的反向代理，上游指向 `http://UNRAID_IP:18080`。
-3. 代理整个主机，而不是只代理一个前缀；必须同时覆盖 `/app`、`/api`、`/raw`、`/clash`、`/surge`、`/loon` 和 `/smart`。
+3. 代理整个主机，而不是只代理一个前缀；必须同时覆盖 `/app`、`/api`、`/raw`、`/clash`、`/clash-ha`、`/surge`、`/loon` 和 `/smart`。
 4. 确认上述转发头正确，并把 Lucky 的精确来源网络加入 `TRUSTED_PROXY_CIDRS`。
-5. 为这个虚拟主机关闭 access log，或配置严格脱敏。分享 bearer token 位于 `/raw/<token>`、`/clash/<token>`、`/surge/<token>`、`/loon/<token>` 与 `/smart/<token>` 路径，默认访问日志会泄露它。
+5. 为这个虚拟主机关闭 access log，或配置严格脱敏。分享 bearer token 位于 `/raw/<token>`、`/clash/<token>`、`/clash-ha/<token>`、`/surge/<token>`、`/loon/<token>` 与 `/smart/<token>` 路径，默认访问日志会泄露它。
 6. 从外部网络确认 HTTPS 正常后，登录 WebUI，设置“公网 Base URL”为该 HTTPS origin，再切换到公网模式。
 
 不要把 Lucky 管理账号或密码放入本项目。即使两个服务由部署者设置为相同凭据，它们仍是两个独立账号，任何一侧修改后都不会自动同步。

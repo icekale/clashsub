@@ -20,6 +20,7 @@ class CreatedShare:
     id: str
     raw_url: str
     clash_url: str | None
+    clash_ha_url: str | None
     surge_url: str | None
     loon_url: str | None
     smart_url: str | None
@@ -59,6 +60,7 @@ class ShareService:
             share_id,
             f"{base}/raw/{token}",
             self._format_url(base, token, "clash") if allow_clash else None,
+            self._format_url(base, token, "clash-ha") if allow_clash else None,
             self._format_url(base, token, "surge") if allow_clash else None,
             self._format_url(base, token, "loon") if allow_clash else None,
             f"{base}/smart/{token}" if allow_clash else None,
@@ -171,15 +173,16 @@ class ShareService:
             return {}
         kinds = ["raw"] if row["allow_raw"] else []
         if row["allow_clash"]:
-            kinds += ["clash", "surge", "loon", "smart"]
+            kinds += ["clash", "clash-ha", "surge", "loon", "smart"]
         return {kind: self._format_url(row["base_url"], token, kind) for kind in kinds}
 
     def reveal(self, share_id: str, kind: str) -> str:
         row = self.db.get_share(share_id)
         if not row or row["revoked_at"] is not None or row["expires_at"] <= time.time():
             raise KeyError("share not found")
-        if kind not in {"raw", "clash", "surge", "loon", "smart"} or (kind == "raw" and not row["allow_raw"]) or (
-            kind in {"clash", "surge", "loon", "smart"} and not row["allow_clash"]
+        clash_kinds = {"clash", "clash-ha", "surge", "loon", "smart"}
+        if kind not in {"raw"} | clash_kinds or (kind == "raw" and not row["allow_raw"]) or (
+            kind in clash_kinds and not row["allow_clash"]
         ):
             raise KeyError("share route unavailable")
         if not row["token_ciphertext"] or not row["token_nonce"] or not row["base_url"] or self.secret_store is None:

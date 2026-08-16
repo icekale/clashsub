@@ -94,6 +94,7 @@ def test_admin_list_carries_existing_urls_without_reveal_posts(app_settings, tmp
         assert listed[0]["urls"] == {
             "raw": created["raw_url"],
             "clash": created["clash_url"],
+            "clash-ha": created["clash_ha_url"],
             "surge": created["surge_url"],
             "loon": created["loon_url"],
             "smart": created["smart_url"],

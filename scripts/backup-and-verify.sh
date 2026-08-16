@@ -25,6 +25,10 @@ ls -1t "$BACKUP_DIR"/compose.yaml.* 2>/dev/null | tail -n +15 | xargs -r rm -f -
 LOG="$BACKUP_DIR/verify.log"
 {
   echo "=== $(date '+%Y-%m-%d %H:%M:%S') ==="
-  bash "$ROOT/scripts/verify.sh" "${1:-http://127.0.0.1:18083}"
+  if [ -n "${1:-}" ]; then
+    bash "$ROOT/scripts/verify.sh" "$1"
+  else
+    bash "$ROOT/scripts/verify.sh"
+  fi
 } >> "$LOG" 2>&1
 tail -n 2000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"

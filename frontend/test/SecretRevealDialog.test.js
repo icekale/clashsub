@@ -33,6 +33,19 @@ describe('SecretRevealDialog', () => {
     expect(wrapper.text()).toContain('OpenClash 转换')
   })
 
+  it('adds a separately labeled field for the health-filtered Clash URL', () => {
+    const wrapper = mount(SecretRevealDialog, {
+      props: {
+        show: true,
+        rawUrl: 'https://sub.example/raw/one-time',
+        clashHaUrl: 'https://sub.example/clash-ha/one-time',
+      },
+    })
+
+    expect(wrapper.text()).toContain('仅健康节点')
+    expect(wrapper.find('textarea#subscription-clash-ha-url').element.value).toContain('/clash-ha/one-time')
+  })
+
   it('keeps Tab focus inside the one-time secret dialog', async () => {
     const wrapper = mount(SecretRevealDialog, {
       attachTo: document.body,

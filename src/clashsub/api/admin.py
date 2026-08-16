@@ -70,7 +70,7 @@ class UpstreamCredentialsRequest(BaseModel):
 
 
 class RevealShareRequest(BaseModel):
-    kind: Literal["raw", "clash", "surge", "loon", "smart"]
+    kind: Literal["raw", "clash", "clash-ha", "surge", "loon", "smart"]
 
 
 def _services(request: Request):
