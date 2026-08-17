@@ -6,6 +6,7 @@ import httpx
 from fastapi.testclient import TestClient
 
 from clashsub.app import create_app
+from clashsub.cache_files import CacheFiles
 from clashsub.db import Database
 from clashsub.settings import RuntimeSettings
 
@@ -339,3 +340,56 @@ def test_share_and_raw_cache_survive_application_restart(app_settings):
         overview = client.get("/api/admin/overview").json()
         assert overview["last_success_source"] == "protocol"
         assert overview["protocol_subscription_expires_at"] == 1_900_000_000
+
+
+def _count_airport_logins(app_settings, last_success_age_seconds):
+    logins = {"count": 0}
+
+    def handler(request):
+        if request.url.path.endswith("/passport/auth/login"):
+            logins["count"] += 1
+            return httpx.Response(200, json={"data": {"auth_data": "native-auth"}})
+        if request.url.path.endswith("/user/getSubscribe"):
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "subscribe_url": "https://sub.invalid/path",
+                        "expired_at": 1_900_000_000,
+                    }
+                },
+            )
+        return httpx.Response(200, content=base64.b64encode(b"trojan://pass@node.example:443#one\n"))
+
+    app_settings.data_dir.mkdir(parents=True, exist_ok=True)
+    db = Database(app_settings.data_dir / "state.db")
+    db.initialize()
+    cache = CacheFiles(app_settings.data_dir / "cache")
+    digest = cache.publish_raw(b"ss://fresh", {})
+    now = time.time()
+    db.record_refresh_success(digest, 1, "uri-list", {}, now, source="protocol")
+    with db.connect() as conn:
+        conn.execute(
+            "UPDATE runtime_state SET last_success_at=?, last_attempt_at=?",
+            (now - last_success_age_seconds, now - last_success_age_seconds),
+        )
+
+    with TestClient(
+        create_app(
+            app_settings,
+            transport=httpx.MockTransport(handler),
+            resolver=public_test_resolver,
+            start_scheduler=True,
+        ),
+        client=("127.0.0.1", 50000),
+    ) as client:
+        client.get("/healthz")
+    return logins["count"]
+
+
+def test_subscription_scheduler_skips_airport_login_when_cache_is_fresh(app_settings):
+    assert _count_airport_logins(app_settings, last_success_age_seconds=120) == 0
+
+
+def test_subscription_scheduler_refreshes_when_cache_is_stale(app_settings):
+    assert _count_airport_logins(app_settings, last_success_age_seconds=7200) == 1

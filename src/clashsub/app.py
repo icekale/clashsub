@@ -165,7 +165,9 @@ def create_app(
         services = build_services(config, transport, resolver)
         configure_logging(config.data_dir / "logs" / "events.log")
         scheduler = RefreshScheduler(
-            services.refresher.refresh,
+            lambda: services.refresher.refresh_if_stale(
+                services.runtime_settings.get().refresh_interval_minutes * 60
+            ),
             delay_seconds=lambda: 24 * 3600,
         )
         health_scheduler = RefreshScheduler(
