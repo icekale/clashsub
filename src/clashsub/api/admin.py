@@ -116,7 +116,6 @@ def overview(request: Request):
         "consecutive_failures": state["consecutive_failures"],
         "last_error": state["last_error"],
         "converter_enabled": converter_enabled,
-        "converter_status": "enabled" if converter_enabled else "disabled",
     }
 
 
@@ -224,32 +223,11 @@ def update_settings(payload: RuntimeSettingsRequest, request: Request):
     current = services.runtime_settings.get()
     if current.access_mode != "public" and payload.access_mode == "public" and not payload.public_acknowledged:
         raise HTTPException(400, "public mode acknowledgement is required")
-    updated = RuntimeSettings(
-        refresh_interval_minutes=payload.refresh_interval_minutes,
-        access_mode=payload.access_mode,
-        lan_base_url=payload.lan_base_url,
-        public_base_url=payload.public_base_url,
-        converter_enabled=payload.converter_enabled,
-        openclash_enabled=payload.openclash_enabled,
-        openclash_api_url=payload.openclash_api_url,
-        openclash_provider=payload.openclash_provider,
-        health_enabled=payload.health_enabled,
-        health_interval_seconds=payload.health_interval_seconds,
-        health_timeout_seconds=payload.health_timeout_seconds,
-        health_refresh_enabled=payload.health_refresh_enabled,
-        health_refresh_online_ratio=payload.health_refresh_online_ratio,
-        health_refresh_cooldown_minutes=payload.health_refresh_cooldown_minutes,
-        health_night_enabled=payload.health_night_enabled,
-        health_night_interval_seconds=payload.health_night_interval_seconds,
-        health_night_start_hour=payload.health_night_start_hour,
-        health_night_end_hour=payload.health_night_end_hour,
-    )
+    updated = RuntimeSettings(**payload.model_dump(exclude={"public_acknowledged"}))
     try:
         services.runtime_settings.update(updated)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    if current.refresh_interval_minutes != updated.refresh_interval_minutes and services.scheduler is not None:
-        services.scheduler.reschedule()
     if getattr(services, "health_scheduler", None) is not None and (
         current.health_interval_seconds != updated.health_interval_seconds
         or current.health_night_enabled != updated.health_night_enabled

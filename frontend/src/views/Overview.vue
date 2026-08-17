@@ -91,11 +91,6 @@ async function runHealthNow() {
   }
 }
 
-function formatLatency(value) {
-  if (value === null || value === undefined) return '—'
-  return `${Math.round(value)} ms`
-}
-
 function formatCheckedAt(value) {
   if (!value) return '尚未检查'
   return formatAge(value)

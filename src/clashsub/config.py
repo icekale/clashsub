@@ -50,33 +50,15 @@ def _optional_secret(name: str) -> SecretStr | None:
 
 
 def _api_base_url() -> str | None:
-    value = os.environ.get("AIRPORT_API_BASE_URL", "").strip().rstrip("/")
+    value = os.environ.get("AIRPORT_API_BASE_URL", "").strip()
     if not value:
         return None
-    if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in value):
+    origin = validate_http_origin(value, "AIRPORT_API_BASE_URL")
+    if urlsplit(origin).scheme != "https":
         raise ConfigError(
             "AIRPORT_API_BASE_URL must be an HTTPS origin/path without credentials, query, or fragment"
         )
-    try:
-        parsed = urlsplit(value)
-        port = parsed.port
-    except ValueError:
-        raise ConfigError(
-            "AIRPORT_API_BASE_URL must be an HTTPS origin/path without credentials, query, or fragment"
-        ) from None
-    if (
-        parsed.scheme != "https"
-        or not parsed.hostname
-        or parsed.username is not None
-        or parsed.password is not None
-        or port == 0
-        or parsed.query
-        or parsed.fragment
-    ):
-        raise ConfigError(
-            "AIRPORT_API_BASE_URL must be an HTTPS origin/path without credentials, query, or fragment"
-        )
-    return value
+    return origin
 
 
 def validate_http_origin(value: str, name: str = "URL") -> str:

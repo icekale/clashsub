@@ -1,7 +1,16 @@
 <script setup>
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { NButton } from 'naive-ui'
 
+
+const FIELDS = [
+  { key: 'raw', prop: 'rawUrl', label: '原始订阅', id: 'one-time-raw-url', copy: '复制原始链接' },
+  { key: 'clash', prop: 'clashUrl', label: 'OpenClash 转换', id: 'one-time-clash-url', copy: '复制转换链接' },
+  { key: 'clashHa', prop: 'clashHaUrl', label: '仅健康节点', id: 'subscription-clash-ha-url', copy: '复制健康节点链接' },
+  { key: 'surge', prop: 'surgeUrl', label: 'Surge 订阅', id: 'subscription-surge-url', copy: '复制 Surge 链接' },
+  { key: 'loon', prop: 'loonUrl', label: 'Loon 订阅', id: 'subscription-loon-url', copy: '复制 Loon 链接' },
+  { key: 'smart', prop: 'smartUrl', label: '智能订阅', id: 'subscription-smart-url', copy: '复制智能链接' },
+]
 
 const props = defineProps({
   show: { type: Boolean, required: true },
@@ -14,18 +23,25 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:show'])
 const dialog = ref(null)
-const rawField = ref(null)
-const clashField = ref(null)
-const clashHaField = ref(null)
-const surgeField = ref(null)
-const loonField = ref(null)
-const smartField = ref(null)
+const fieldEls = ref({})
 const closeButton = ref(null)
 const copyStatus = ref('')
 const focusReturnTarget = ref(null)
+const fields = computed(() =>
+  FIELDS.filter((field) => props[field.prop]).map((field) => ({
+    ...field,
+    value: props[field.prop],
+  })),
+)
 
 function close() {
   emit('update:show', false)
+}
+
+function bindField(key) {
+  return (el) => {
+    fieldEls.value[key] = el
+  }
 }
 
 function selectField(field) {
@@ -50,13 +66,13 @@ function trapFocus(event) {
   }
 }
 
-async function copy(value, field) {
+async function copy(field) {
   try {
     if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable')
-    await navigator.clipboard.writeText(value)
+    await navigator.clipboard.writeText(field.value)
     copyStatus.value = '链接已复制。'
   } catch (_) {
-    selectField(field)
+    selectField(fieldEls.value[field.key])
     copyStatus.value = '自动复制失败，链接已选中，请手动复制。'
   }
 }
@@ -101,78 +117,19 @@ watch(
         <n-button ref="closeButton" quaternary aria-label="关闭链接窗口" @click="close">关闭</n-button>
       </div>
 
-      <div class="secret-field">
-        <label for="one-time-raw-url">原始订阅</label>
+      <div v-for="field in fields" :key="field.key" class="secret-field">
+        <label :for="field.id">{{ field.label }}</label>
         <textarea
-          id="one-time-raw-url"
-          ref="rawField"
-          :value="rawUrl"
+          :id="field.id"
+          :ref="bindField(field.key)"
+          :value="field.value"
           readonly
           rows="3"
           @focus="$event.target.select()"
         />
         <div class="secret-field-actions">
-          <n-button secondary @click="selectField(rawField)">选择文本</n-button>
-          <n-button type="primary" @click="copy(rawUrl, rawField)">复制原始链接</n-button>
-        </div>
-      </div>
-
-      <div v-if="clashUrl" class="secret-field">
-        <label for="one-time-clash-url">OpenClash 转换</label>
-        <textarea
-          id="one-time-clash-url"
-          ref="clashField"
-          :value="clashUrl"
-          readonly
-          rows="3"
-          @focus="$event.target.select()"
-        />
-        <div class="secret-field-actions">
-          <n-button secondary @click="selectField(clashField)">选择文本</n-button>
-          <n-button type="primary" @click="copy(clashUrl, clashField)">复制转换链接</n-button>
-        </div>
-      </div>
-
-      <div v-if="clashHaUrl" class="secret-field">
-        <label for="subscription-clash-ha-url">仅健康节点</label>
-        <textarea
-          id="subscription-clash-ha-url"
-          ref="clashHaField"
-          :value="clashHaUrl"
-          readonly
-          rows="3"
-          @focus="$event.target.select()"
-        />
-        <div class="secret-field-actions">
-          <n-button secondary @click="selectField(clashHaField)">选择文本</n-button>
-          <n-button type="primary" @click="copy(clashHaUrl, clashHaField)">复制健康节点链接</n-button>
-        </div>
-      </div>
-
-      <div v-if="surgeUrl" class="secret-field">
-        <label for="subscription-surge-url">Surge 订阅</label>
-        <textarea id="subscription-surge-url" ref="surgeField" :value="surgeUrl" readonly rows="3" @focus="$event.target.select()" />
-        <div class="secret-field-actions">
-          <n-button secondary @click="selectField(surgeField)">选择文本</n-button>
-          <n-button type="primary" @click="copy(surgeUrl, surgeField)">复制 Surge 链接</n-button>
-        </div>
-      </div>
-
-      <div v-if="loonUrl" class="secret-field">
-        <label for="subscription-loon-url">Loon 订阅</label>
-        <textarea id="subscription-loon-url" ref="loonField" :value="loonUrl" readonly rows="3" @focus="$event.target.select()" />
-        <div class="secret-field-actions">
-          <n-button secondary @click="selectField(loonField)">选择文本</n-button>
-          <n-button type="primary" @click="copy(loonUrl, loonField)">复制 Loon 链接</n-button>
-        </div>
-      </div>
-
-      <div v-if="smartUrl" class="secret-field">
-        <label for="subscription-smart-url">智能订阅</label>
-        <textarea id="subscription-smart-url" ref="smartField" :value="smartUrl" readonly rows="3" @focus="$event.target.select()" />
-        <div class="secret-field-actions">
-          <n-button secondary @click="selectField(smartField)">选择文本</n-button>
-          <n-button type="primary" @click="copy(smartUrl, smartField)">复制智能链接</n-button>
+          <n-button secondary @click="selectField(fieldEls[field.key])">选择文本</n-button>
+          <n-button type="primary" @click="copy(field)">{{ field.copy }}</n-button>
         </div>
       </div>
 

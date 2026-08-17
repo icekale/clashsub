@@ -234,7 +234,8 @@ async def test_scheduler_refreshes_immediately_and_stops_cleanly():
         async def refresh(self):
             calls.append("refresh")
 
-    scheduler = RefreshScheduler(FakeRefresher(), delay_seconds=lambda: 3600)
+    refresher = FakeRefresher()
+    scheduler = RefreshScheduler(refresher.refresh, delay_seconds=lambda: 3600)
     task = asyncio.create_task(scheduler.run())
     await asyncio.sleep(0)
     await scheduler.stop()
@@ -252,7 +253,8 @@ async def test_scheduler_honors_reschedule_during_refresh():
             if len(calls) == 1:
                 scheduler.reschedule()
 
-    scheduler = RefreshScheduler(FakeRefresher(), delay_seconds=lambda: 3600)
+    refresher = FakeRefresher()
+    scheduler = RefreshScheduler(refresher.refresh, delay_seconds=lambda: 3600)
     task = asyncio.create_task(scheduler.run())
     await asyncio.sleep(0.05)
     await scheduler.stop()

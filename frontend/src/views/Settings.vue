@@ -60,7 +60,7 @@ const credentials = reactive({
   new_password: '',
   confirmation: '',
 })
-const airportCredentials = reactive({ username: '', password: '', password_configured: false })
+const airportCredentials = reactive({ username: '', password: '' })
 
 const baseUrlChanged = computed(
   () => form.lan_base_url !== original.lan_base_url
@@ -112,7 +112,6 @@ async function load() {
     if (airportPayload) {
       airportCredentials.username = airportPayload.username || ''
       airportCredentials.password = ''
-      airportCredentials.password_configured = Boolean(airportPayload.password_configured)
     }
     openclashSecretConfigured.value = Boolean(openclashPayload?.configured)
     openclashSecret.value = ''
@@ -194,7 +193,6 @@ async function saveAirportCredentials() {
     })
     airportCredentials.username = username
     airportCredentials.password = ''
-    airportCredentials.password_configured = true
     message.success(`机场凭据验证成功，已获取 ${result.node_count} 个节点`)
     upstreamTestResult.value = {
       ok: true,

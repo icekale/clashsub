@@ -154,14 +154,6 @@ def build_services(config: Settings, transport=None, resolver=None) -> Services:
     )
 
 
-class _HealthTask:
-    def __init__(self, integration: IntegrationService):
-        self.integration = integration
-
-    async def refresh(self):
-        await self.integration.run_health()
-
-
 def create_app(
     config: Settings,
     transport=None,
@@ -173,11 +165,11 @@ def create_app(
         services = build_services(config, transport, resolver)
         configure_logging(config.data_dir / "logs" / "events.log")
         scheduler = RefreshScheduler(
-            services.refresher,
+            services.refresher.refresh,
             delay_seconds=lambda: 24 * 3600,
         )
         health_scheduler = RefreshScheduler(
-            _HealthTask(services.integration),
+            services.integration.run_health,
             delay_seconds=lambda: services.runtime_settings.get().effective_health_interval(
                 time.localtime().tm_hour
             ),

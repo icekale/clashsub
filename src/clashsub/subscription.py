@@ -24,7 +24,7 @@ from .sources import (
     SubscriptionSource,
     V2BoardSubscriptionSource,
 )
-from .v2board_client import V2BoardError
+from .v2board_client import V2BoardError, interstitial_category
 
 
 logger = get_logger("refresher")
@@ -100,8 +100,6 @@ MAX_REDIRECTS = 3
 DOWNLOAD_TOTAL_DEADLINE = 60.0
 RESPONSE_CLASSIFICATION_BYTES = 64 * 1024
 REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
-CAPTCHA_MARKERS = ("captcha", "recaptcha", "turnstile", "人机")
-CHALLENGE_MARKERS = ("<html", "<!doctype html", "just a moment", "cf-chl-")
 MIN_RETRY_SECONDS = 60
 
 Resolver = Callable[[str, int], Awaitable[Sequence[str]]]
@@ -111,27 +109,6 @@ async def _resolve_host(hostname: str, port: int) -> tuple[str, ...]:
     loop = asyncio.get_running_loop()
     results = await loop.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
     return tuple(dict.fromkeys(result[4][0] for result in results))
-
-
-def _interstitial_category(payload: bytes) -> str | None:
-    try:
-        document = json.loads(payload)
-    except (ValueError, UnicodeDecodeError, RecursionError):
-        prefix = payload[:4096].decode("utf-8", errors="ignore").lower()
-        if any(marker in prefix for marker in CHALLENGE_MARKERS):
-            return "challenge"
-        return None
-    if not isinstance(document, dict):
-        return None
-    message = document.get("message")
-    if not isinstance(message, str):
-        return None
-    lowered_message = message.lower()
-    if any(marker in lowered_message for marker in CAPTCHA_MARKERS) or (
-        "验证" in lowered_message and "身份验证" not in lowered_message
-    ):
-        return "captcha_required"
-    return None
 
 
 @dataclass(frozen=True)
@@ -406,7 +383,7 @@ class UpstreamRefresher:
                             continue
 
                         if not 200 <= status_code < 300:
-                            if category := _interstitial_category(body):
+                            if category := interstitial_category(body):
                                 raise V2BoardError(category, "download")
                             if status_code in {401, 403}:
                                 raise V2BoardError(
@@ -419,7 +396,7 @@ class UpstreamRefresher:
                         try:
                             validated = validate_subscription(body, self.max_bytes)
                         except InvalidSubscription:
-                            if category := _interstitial_category(body):
+                            if category := interstitial_category(body):
                                 raise V2BoardError(category, "download") from None
                             raise
                         safe_headers = {

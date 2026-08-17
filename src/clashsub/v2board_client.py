@@ -12,9 +12,30 @@ from pydantic import SecretStr
 
 V2BOARD_USER_AGENT = "BBGen2UA"
 MAX_API_RESPONSE_BYTES = 64 * 1024
-_CAPTCHA_MARKERS = ("captcha", "recaptcha", "turnstile", "人机")
-_CHALLENGE_MARKERS = ("<html", "<!doctype html", "just a moment", "cf-chl-")
+CAPTCHA_MARKERS = ("captcha", "recaptcha", "turnstile", "人机")
+CHALLENGE_MARKERS = ("<html", "<!doctype html", "just a moment", "cf-chl-")
 _INVALID_JSON = object()
+
+
+def interstitial_category(payload: bytes) -> str | None:
+    try:
+        document = json.loads(payload)
+    except (ValueError, UnicodeDecodeError, RecursionError):
+        prefix = payload[:4096].decode("utf-8", errors="ignore").lower()
+        if any(marker in prefix for marker in CHALLENGE_MARKERS):
+            return "challenge"
+        return None
+    if not isinstance(document, dict):
+        return None
+    message = document.get("message")
+    if not isinstance(message, str):
+        return None
+    lowered = message.lower()
+    if any(marker in lowered for marker in CAPTCHA_MARKERS) or (
+        "验证" in lowered and "身份验证" not in lowered
+    ):
+        return "captcha_required"
+    return None
 
 
 @dataclass(frozen=True)
@@ -121,22 +142,13 @@ class V2BoardClient:
         if network_failure:
             raise V2BoardError("network", stage) from None
 
+        category = interstitial_category(bytes(body))
+        if category:
+            raise V2BoardError(category, stage)
         try:
             document = json.loads(body)
         except (ValueError, UnicodeDecodeError, RecursionError):
             document = _INVALID_JSON
-        if isinstance(document, dict):
-            message = document.get("message")
-            if isinstance(message, str):
-                lowered_message = message.lower()
-                if any(marker in lowered_message for marker in _CAPTCHA_MARKERS) or (
-                    "验证" in lowered_message and "身份验证" not in lowered_message
-                ):
-                    raise V2BoardError("captcha_required", stage)
-        elif document is _INVALID_JSON:
-            prefix = bytes(body[:4096]).decode("utf-8", errors="ignore").lower()
-            if any(marker in prefix for marker in _CHALLENGE_MARKERS):
-                raise V2BoardError("challenge", stage)
         if response.status_code in {401, 403}:
             raise V2BoardError("authentication", stage, retry_auth=stage == "subscribe")
         if not 200 <= response.status_code < 300:

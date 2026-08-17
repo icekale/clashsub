@@ -4,7 +4,7 @@ import { useMessage } from 'naive-ui'
 
 import { api } from '../api.js'
 import SecretRevealDialog from '../components/SecretRevealDialog.vue'
-import { buildShareRequest, CLASH_SHARE_KINDS, kindLabel, statusLabel } from '../shareView.js'
+import { buildShareRequest, CLASH_SHARE_KINDS, copyText, kindLabel, statusLabel } from '../shareView.js'
 
 
 const message = useMessage()
@@ -51,27 +51,6 @@ function showOneTimeLinks(payload) {
     loonUrl: payload.loon_url || '',
     smartUrl: payload.smart_url || '',
   })
-}
-
-async function revealExisting(item, kind) {
-  actionKey.value = `${item.id}:reveal:${kind}`
-  try {
-    const result = await api.request(`/api/admin/shares/${item.id}/reveal`, {
-      method: 'POST',
-      body: { kind },
-    })
-    reveal.show = true
-    reveal.rawUrl = kind === 'raw' ? result.url : ''
-    reveal.clashUrl = kind === 'clash' ? result.url : ''
-    reveal.clashHaUrl = kind === 'clash-ha' ? result.url : ''
-    reveal.surgeUrl = kind === 'surge' ? result.url : ''
-    reveal.loonUrl = kind === 'loon' ? result.url : ''
-    reveal.smartUrl = kind === 'smart' ? result.url : ''
-  } catch (requestError) {
-    message.error(requestError.message)
-  } finally {
-    actionKey.value = ''
-  }
 }
 
 function setRevealVisibility(visible) {
@@ -130,31 +109,8 @@ async function revealAll(item) {
 }
 
 async function copyLink(url) {
-  let copied = false
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(url)
-      copied = true
-    }
-  } catch (_) {
-    copied = false
-  }
-  if (!copied) {
-    const field = document.createElement('textarea')
-    field.value = url
-    field.readOnly = true
-    field.style.position = 'fixed'
-    field.style.opacity = '0'
-    document.body.appendChild(field)
-    field.select()
-    copied = Boolean(document.execCommand?.('copy'))
-    field.remove()
-  }
-  if (copied) {
-    message.success('链接已复制')
-  } else {
-    message.error('复制失败，请手动复制')
-  }
+  if (await copyText(url)) message.success('链接已复制')
+  else message.error('复制失败，请手动复制')
 }
 
 async function load() {
@@ -168,18 +124,11 @@ async function load() {
   try {
     items.value = await api.request('/api/admin/shares')
     error.value = ''
-    await Promise.allSettled(
-      items.value
-        .filter((item) => item.recoverable && !item.revoked && !item.expired)
-        .map(async (item) => {
-          // 列表接口直接带回了已有链接，避免依赖逐个 reveal 请求（在部分反代路径下会静默挂起）。
-          if (item.urls && Object.keys(item.urls).length) {
-            revealedLinks[item.id] = { ...item.urls }
-          } else {
-            await fetchAllLinks(item)
-          }
-        }),
-    )
+    for (const item of items.value) {
+      if (item.urls && Object.keys(item.urls).length) {
+        revealedLinks[item.id] = { ...item.urls }
+      }
+    }
   } catch (requestError) {
     error.value = requestError.message
   } finally {
@@ -353,53 +302,6 @@ load()
             :loading="actionKey === `${item.id}:reveal:all`"
             @click="revealAll(item)"
           >{{ revealedLinks[item.id] ? '重新获取链接' : '查看全部链接' }}</n-button>
-          <n-button
-            secondary
-            size="small"
-            :disabled="item.revoked || item.expired || !item.recoverable"
-            :loading="actionKey === `${item.id}:reveal:raw`"
-            @click="revealExisting(item, 'raw')"
-          >查看原始链接</n-button>
-          <n-button
-            v-if="item.allow_clash"
-            secondary
-            size="small"
-            :disabled="item.revoked || item.expired || !item.recoverable"
-            :loading="actionKey === `${item.id}:reveal:clash`"
-            @click="revealExisting(item, 'clash')"
-          >查看 Clash 链接</n-button>
-          <n-button
-            v-if="item.allow_clash"
-            secondary
-            size="small"
-            :disabled="item.revoked || item.expired || !item.recoverable"
-            :loading="actionKey === `${item.id}:reveal:clash-ha`"
-            @click="revealExisting(item, 'clash-ha')"
-          >查看健康节点链接</n-button>
-          <n-button
-            v-if="item.allow_clash"
-            secondary
-            size="small"
-            :disabled="item.revoked || item.expired || !item.recoverable"
-            :loading="actionKey === `${item.id}:reveal:surge`"
-            @click="revealExisting(item, 'surge')"
-          >查看 Surge 链接</n-button>
-          <n-button
-            v-if="item.allow_clash"
-            secondary
-            size="small"
-            :disabled="item.revoked || item.expired || !item.recoverable"
-            :loading="actionKey === `${item.id}:reveal:loon`"
-            @click="revealExisting(item, 'loon')"
-          >查看 Loon 链接</n-button>
-          <n-button
-            v-if="item.allow_clash"
-            secondary
-            size="small"
-            :disabled="item.revoked || item.expired || !item.recoverable"
-            :loading="actionKey === `${item.id}:reveal:smart`"
-            @click="revealExisting(item, 'smart')"
-          >查看智能链接</n-button>
           <n-button
             secondary
             size="small"

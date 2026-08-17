@@ -93,9 +93,11 @@ describe('Shares', () => {
   })
 
   it('shows record metadata and automatically restores its raw link', async () => {
-    api.request
-      .mockResolvedValueOnce([{ ...summary, recoverable: true }])
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/raw/stable-token' })
+    api.request.mockResolvedValueOnce([{
+      ...summary,
+      recoverable: true,
+      urls: { raw: 'https://sub.example.com/raw/stable-token' },
+    }])
     const wrapper = mountShares()
     await flushPromises()
 
@@ -131,33 +133,37 @@ describe('Shares', () => {
     expect(buttonWithText(wrapper, '重新获取链接')).toBeTruthy()
   })
 
-  it('reveals an existing raw link through the CSRF-protected endpoint', async () => {
+  it('reveals existing links through the CSRF-protected endpoint', async () => {
     api.request
       .mockResolvedValueOnce([{ ...summary, recoverable: true }])
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/raw/stable-token' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/raw/stable-token' })
     const wrapper = mountShares()
     await flushPromises()
 
-    await buttonWithText(wrapper, '查看原始链接').trigger('click')
+    await buttonWithText(wrapper, '查看全部链接').trigger('click')
     await flushPromises()
 
-    expect(api.request).toHaveBeenNthCalledWith(3, `/api/admin/shares/${summary.id}/reveal`, {
+    expect(api.request).toHaveBeenNthCalledWith(2, `/api/admin/shares/${summary.id}/reveal`, {
       method: 'POST',
       body: { kind: 'raw' },
     })
-    expect(wrapper.get('[data-testid="secret-reveal"]').text()).toContain('/raw/stable-token')
+    expect(wrapper.text()).toContain('/raw/stable-token')
   })
 
   it('automatically shows all recoverable historical links for a multi-format share', async () => {
-    api.request
-      .mockResolvedValueOnce([{ ...summary, allow_clash: true, recoverable: true }])
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/raw/history' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/clash/history' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/clash-ha/history' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/surge/history' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/loon/history' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/smart/history' })
+    api.request.mockResolvedValueOnce([{
+      ...summary,
+      allow_clash: true,
+      recoverable: true,
+      urls: {
+        raw: 'https://sub.example.com/raw/history',
+        clash: 'https://sub.example.com/clash/history',
+        'clash-ha': 'https://sub.example.com/clash-ha/history',
+        surge: 'https://sub.example.com/surge/history',
+        loon: 'https://sub.example.com/loon/history',
+        smart: 'https://sub.example.com/smart/history',
+      },
+    }])
     const wrapper = mountShares()
     await flushPromises()
 
@@ -167,6 +173,7 @@ describe('Shares', () => {
     expect(wrapper.text()).toContain('https://sub.example.com/surge/history')
     expect(wrapper.text()).toContain('https://sub.example.com/loon/history')
     expect(wrapper.text()).toContain('https://sub.example.com/smart/history')
+    expect(api.request).toHaveBeenCalledTimes(1)
   })
 
   it('keeps successful historical links visible when one format fails', async () => {
@@ -179,6 +186,9 @@ describe('Shares', () => {
       .mockResolvedValueOnce({ url: 'https://sub.example.com/loon/history' })
       .mockResolvedValueOnce({ url: 'https://sub.example.com/smart/history' })
     const wrapper = mountShares()
+    await flushPromises()
+
+    await buttonWithText(wrapper, '查看全部链接').trigger('click')
     await flushPromises()
 
     expect(wrapper.text()).toContain('https://sub.example.com/raw/history')
@@ -199,6 +209,9 @@ describe('Shares', () => {
       .mockRejectedValueOnce(new Error('loon unavailable'))
       .mockRejectedValueOnce(new Error('smart unavailable'))
     const wrapper = mountShares()
+    await flushPromises()
+
+    await buttonWithText(wrapper, '查看全部链接').trigger('click')
     await flushPromises()
 
     expect(wrapper.text()).toContain('链接加载失败')
@@ -223,6 +236,8 @@ describe('Shares', () => {
     const wrapper = mountShares()
     await flushPromises()
 
+    await buttonWithText(wrapper, '查看全部链接').trigger('click')
+    await flushPromises()
     await buttonWithText(wrapper, '重新获取链接').trigger('click')
     await flushPromises()
 
@@ -239,26 +254,22 @@ describe('Shares', () => {
     await flushPromises()
 
     expect(buttonWithText(wrapper, '查看全部链接')).toBeUndefined()
-    expect(buttonWithText(wrapper, '查看原始链接').attributes('disabled')).toBeDefined()
-    expect(buttonWithText(wrapper, '查看 Clash 链接').attributes('disabled')).toBeDefined()
   })
 
   it('refreshes automatically displayed historical links with the list', async () => {
     api.request
-      .mockResolvedValueOnce([{ ...summary, allow_clash: true, recoverable: true }])
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/raw/history' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/clash/history' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/clash-ha/history' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/surge/history' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/loon/history' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/smart/history' })
-      .mockResolvedValueOnce([{ ...summary, allow_clash: true, recoverable: true }])
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/raw/refreshed' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/clash/refreshed' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/clash-ha/refreshed' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/surge/refreshed' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/loon/refreshed' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/smart/refreshed' })
+      .mockResolvedValueOnce([{
+        ...summary,
+        allow_clash: true,
+        recoverable: true,
+        urls: { raw: 'https://sub.example.com/raw/history' },
+      }])
+      .mockResolvedValueOnce([{
+        ...summary,
+        allow_clash: true,
+        recoverable: true,
+        urls: { raw: 'https://sub.example.com/raw/refreshed' },
+      }])
     const wrapper = mountShares()
     await flushPromises()
 
@@ -274,9 +285,11 @@ describe('Shares', () => {
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined })
     const execCommand = vi.fn().mockReturnValue(true)
     Object.defineProperty(document, 'execCommand', { configurable: true, value: execCommand })
-    api.request
-      .mockResolvedValueOnce([{ ...summary, recoverable: true }])
-      .mockResolvedValueOnce({ url: 'http://nas.example/raw/history' })
+    api.request.mockResolvedValueOnce([{
+      ...summary,
+      recoverable: true,
+      urls: { raw: 'http://nas.example/raw/history' },
+    }])
     const wrapper = mountShares()
     await flushPromises()
 

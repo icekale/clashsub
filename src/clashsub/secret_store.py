@@ -71,9 +71,3 @@ class SecretStore:
     def put(self, name: str, value: str) -> None:
         version, nonce, ciphertext = self.seal(name, value)
         self.db.put_encrypted_secrets({name: (version, nonce, ciphertext)}, time.time())
-
-    def put_many(self, values: dict[str, str]) -> None:
-        records = {}
-        for name, value in values.items():
-            records[name] = self.seal(name, value)
-        self.db.put_encrypted_secrets(records, time.time())

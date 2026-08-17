@@ -379,11 +379,6 @@ p {
   overflow-wrap: anywhere;
 }
 
-.empty-panel {
-  min-height: 180px;
-  color: var(--muted);
-}
-
 .login-shell {
   display: grid;
   width: calc(100% - 32px);

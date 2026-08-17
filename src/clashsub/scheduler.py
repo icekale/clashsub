@@ -3,8 +3,8 @@ import logging
 
 
 class RefreshScheduler:
-    def __init__(self, refresher, delay_seconds):
-        self.refresher = refresher
+    def __init__(self, refresh, delay_seconds):
+        self.refresh = refresh
         self.delay_seconds = delay_seconds
         self._stop = asyncio.Event()
         self._wake = asyncio.Event()
@@ -20,7 +20,7 @@ class RefreshScheduler:
             # 而不是被清掉后继续休眠整个间隔。
             self._wake.clear()
             try:
-                await self.refresher.refresh()
+                await self.refresh()
             except Exception as exc:
                 self._logger.error("scheduled refresh failed: %s", type(exc).__name__)
             if self._stop.is_set():

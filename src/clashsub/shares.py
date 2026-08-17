@@ -151,6 +151,14 @@ class ShareService:
         self.db.rotate_share(share_id, token_hash(token), *sealed, base_url=base)
         return self._urls(share_id, token, row["expires_at"], bool(row["allow_clash"]))
 
+    def _open_token(self, row) -> str:
+        return self.secret_store.open(
+            f"share:{row['id']}",
+            row["token_version"],
+            row["token_nonce"],
+            row["token_ciphertext"],
+        )
+
     def urls_for(self, share_id: str) -> dict[str, str]:
         """Return every allowed kind->URL for a share, or {} when unrecoverable.
 
@@ -163,12 +171,7 @@ class ShareService:
         if not row["token_ciphertext"] or not row["token_nonce"] or not row["base_url"] or self.secret_store is None:
             return {}
         try:
-            token = self.secret_store.open(
-                f"share:{share_id}",
-                row["token_version"],
-                row["token_nonce"],
-                row["token_ciphertext"],
-            )
+            token = self._open_token(row)
         except SecretStoreUnavailable:
             return {}
         kinds = ["raw"] if row["allow_raw"] else []
@@ -188,12 +191,7 @@ class ShareService:
         if not row["token_ciphertext"] or not row["token_nonce"] or not row["base_url"] or self.secret_store is None:
             raise KeyError("share is not recoverable")
         try:
-            token = self.secret_store.open(
-                f"share:{share_id}",
-                row["token_version"],
-                row["token_nonce"],
-                row["token_ciphertext"],
-            )
+            token = self._open_token(row)
         except SecretStoreUnavailable as exc:
             raise RuntimeError("share recovery unavailable") from exc
         return self._format_url(row["base_url"], token, kind)

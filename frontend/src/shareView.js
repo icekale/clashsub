@@ -29,3 +29,24 @@ export function statusLabel(item) {
   if (item.expired) return '已过期'
   return '有效'
 }
+
+export async function copyText(value) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value)
+      return true
+    }
+  } catch (_) {
+    /* fall through to execCommand */
+  }
+  const field = document.createElement('textarea')
+  field.value = value
+  field.readOnly = true
+  field.style.position = 'fixed'
+  field.style.opacity = '0'
+  document.body.appendChild(field)
+  field.select()
+  const copied = Boolean(document.execCommand?.('copy'))
+  field.remove()
+  return copied
+}

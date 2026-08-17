@@ -87,8 +87,7 @@ class CacheFiles:
         normalized = str(uuid.UUID(share_id))
         if format == "clash":
             return self.root / "converted" / f"{normalized}.yaml"
-        extension = "yaml" if format == "clash" else "conf"
-        return self.root / "converted" / f"{normalized}-{format}.{extension}"
+        return self.root / "converted" / f"{normalized}-{format}.conf"
 
     def write_converter_template(self, share_id: str, text: str, format: str = "clash") -> None:
         self._atomic_write(self._converter_path(share_id, format), text.encode("utf-8"))
