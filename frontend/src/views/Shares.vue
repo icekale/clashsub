@@ -19,7 +19,7 @@ const renewDays = ref(365)
 const revealedLinks = reactive({})
 const linkErrors = reactive({})
 const form = reactive({ label: '', days: 365, allowRaw: true, allowClash: false })
-const reveal = reactive({ show: false, rawUrl: '', clashUrl: '', clashHaUrl: '', surgeUrl: '', loonUrl: '', smartUrl: '' })
+const reveal = reactive({ show: false, urls: {} })
 
 watch(
   () => form.allowClash,
@@ -42,27 +42,20 @@ function statusType(item) {
 }
 
 function showOneTimeLinks(payload) {
-  Object.assign(reveal, {
-    show: true,
-    rawUrl: payload.raw_url,
-    clashUrl: payload.clash_url || '',
-    clashHaUrl: payload.clash_ha_url || '',
-    surgeUrl: payload.surge_url || '',
-    loonUrl: payload.loon_url || '',
-    smartUrl: payload.smart_url || '',
-  })
+  reveal.show = true
+  reveal.urls = {
+    raw: payload.raw_url,
+    clash: payload.clash_url || '',
+    clashHa: payload.clash_ha_url || '',
+    surge: payload.surge_url || '',
+    loon: payload.loon_url || '',
+    smart: payload.smart_url || '',
+  }
 }
 
 function setRevealVisibility(visible) {
   reveal.show = visible
-  if (!visible) {
-    reveal.rawUrl = ''
-    reveal.clashUrl = ''
-    reveal.clashHaUrl = ''
-    reveal.surgeUrl = ''
-    reveal.loonUrl = ''
-    reveal.smartUrl = ''
-  }
+  if (!visible) reveal.urls = {}
 }
 
 function clearRevealedLinks(shareId) {
@@ -351,12 +344,7 @@ load()
 
   <SecretRevealDialog
     :show="reveal.show"
-    :raw-url="reveal.rawUrl"
-    :clash-url="reveal.clashUrl"
-    :clash-ha-url="reveal.clashHaUrl"
-    :surge-url="reveal.surgeUrl"
-    :loon-url="reveal.loonUrl"
-    :smart-url="reveal.smartUrl"
+    :urls="reveal.urls"
     @update:show="setRevealVisibility"
   />
 </template>

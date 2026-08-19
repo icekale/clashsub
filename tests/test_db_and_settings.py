@@ -218,18 +218,6 @@ def test_integration_settings_persist_roundtrip(tmp_path: Path):
     assert loaded.health_night_end_hour == 6
 
 
-def test_legacy_health_interval_minutes_migrates_to_seconds(tmp_path: Path):
-    db = Database(tmp_path / "state.db")
-    db.initialize()
-    store = SettingsStore(db)
-    with db.transaction() as conn:
-        conn.execute(
-            "INSERT INTO app_settings(key, value) VALUES ('health_interval_minutes', '15')"
-        )
-
-    assert store.get().health_interval_seconds == 900
-
-
 def test_node_health_roundtrip(tmp_path: Path):
     db = Database(tmp_path / "state.db")
     db.initialize()

@@ -45,8 +45,8 @@ const summary = {
 
 const SecretRevealStub = {
   name: 'SecretRevealDialog',
-  props: ['show', 'rawUrl', 'clashUrl'],
-  template: '<div v-if="show" data-testid="secret-reveal">{{ rawUrl }} {{ clashUrl }}</div>',
+  props: ['show', 'urls'],
+  template: '<div v-if="show" data-testid="secret-reveal">{{ urls.raw }} {{ urls.clash }}</div>',
 }
 
 function mountShares() {

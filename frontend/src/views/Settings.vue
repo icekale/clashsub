@@ -33,7 +33,7 @@ const accessModeOptions = [
   { label: '仅局域网', value: 'lan' },
   { label: '公网（需要 Lucky）', value: 'public' },
 ]
-const form = reactive({
+const SETTINGS_DEFAULTS = {
   refresh_interval_minutes: 60,
   access_mode: 'lan',
   lan_base_url: '',
@@ -52,7 +52,8 @@ const form = reactive({
   health_night_interval_seconds: 600,
   health_night_start_hour: 0,
   health_night_end_hour: 8,
-})
+}
+const form = reactive({ ...SETTINGS_DEFAULTS })
 const original = reactive({ ...form })
 const credentials = reactive({
   current_password: '',
@@ -68,26 +69,11 @@ const baseUrlChanged = computed(
 )
 
 function settingsFields(payload) {
-  return {
-    refresh_interval_minutes: payload.refresh_interval_minutes,
-    access_mode: payload.access_mode,
-    lan_base_url: payload.lan_base_url || '',
-    public_base_url: payload.public_base_url || '',
-    converter_enabled: Boolean(payload.converter_enabled),
-    openclash_enabled: Boolean(payload.openclash_enabled),
-    openclash_api_url: payload.openclash_api_url || '',
-    openclash_provider: payload.openclash_provider || '',
-    health_enabled: Boolean(payload.health_enabled),
-    health_interval_seconds: payload.health_interval_seconds || 600,
-    health_timeout_seconds: payload.health_timeout_seconds || 5,
-    health_refresh_enabled: Boolean(payload.health_refresh_enabled),
-    health_refresh_online_ratio: payload.health_refresh_online_ratio ?? 0.5,
-    health_refresh_cooldown_minutes: payload.health_refresh_cooldown_minutes || 10,
-    health_night_enabled: Boolean(payload.health_night_enabled),
-    health_night_interval_seconds: payload.health_night_interval_seconds || 600,
-    health_night_start_hour: payload.health_night_start_hour ?? 0,
-    health_night_end_hour: payload.health_night_end_hour ?? 8,
+  const next = { ...SETTINGS_DEFAULTS }
+  for (const key of Object.keys(SETTINGS_DEFAULTS)) {
+    if (payload[key] != null) next[key] = payload[key]
   }
+  return next
 }
 
 function applySettings(payload) {

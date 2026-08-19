@@ -3,15 +3,13 @@ export function createApiClient(fetchImpl = fetch, onUnauthorized = () => {}) {
 
   // 反代/网络异常时请求可能无限挂起；限时后转为可见错误，而不是页面永远空白等待。
   async function fetchWithTimeout(path, init) {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 20000)
     try {
-      return await fetchImpl(path, { ...init, signal: controller.signal })
+      return await fetchImpl(path, { ...init, signal: AbortSignal.timeout(20000) })
     } catch (error) {
-      if (error?.name === 'AbortError') throw new Error('请求超时，请重试')
+      if (error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+        throw new Error('请求超时，请重试')
+      }
       throw error
-    } finally {
-      clearTimeout(timer)
     }
   }
 

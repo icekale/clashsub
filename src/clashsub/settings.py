@@ -98,7 +98,6 @@ class SettingsStore:
     def get(self) -> RuntimeSettings:
         with self.db.connect() as conn:
             values = {row["key"]: row["value"] for row in conn.execute("SELECT key, value FROM app_settings")}
-        health_interval_minutes = self._parse_int(values, "health_interval_minutes", 10)
         return RuntimeSettings(
             refresh_interval_minutes=self._parse_int(values, "refresh_interval_minutes", 60),
             access_mode=values.get("access_mode", "lan"),
@@ -109,11 +108,7 @@ class SettingsStore:
             openclash_api_url=values.get("openclash_api_url", ""),
             openclash_provider=values.get("openclash_provider", ""),
             health_enabled=values.get("health_enabled", "false") == "true",
-            health_interval_seconds=(
-                self._parse_int(values, "health_interval_seconds", health_interval_minutes * 60)
-                if values.get("health_interval_seconds")
-                else health_interval_minutes * 60
-            ),
+            health_interval_seconds=self._parse_int(values, "health_interval_seconds", 600),
             health_timeout_seconds=self._parse_int(values, "health_timeout_seconds", 5),
             health_refresh_enabled=values.get("health_refresh_enabled", "false") == "true",
             health_refresh_online_ratio=self._parse_float(values, "health_refresh_online_ratio", 0.5),

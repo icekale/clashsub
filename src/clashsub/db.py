@@ -123,7 +123,7 @@ class Database:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.executescript(SCHEMA)
             # 迁移必须串行化：读列名 + ALTER 在 BEGIN IMMEDIATE 里原子执行，
-            # 并发初始化（例如 migrate CLI 与应用同时启动）的后者会阻塞后重读列名，
+            # 并发初始化的后者会阻塞后重读列名，
             # 而不是在同一列上重复 ALTER 而崩溃。
             conn.execute("BEGIN IMMEDIATE")
             try:

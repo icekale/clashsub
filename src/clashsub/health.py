@@ -6,8 +6,6 @@ import ssl
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
-from urllib.parse import quote
-
 import httpx
 import yaml
 

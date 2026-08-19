@@ -20,7 +20,6 @@ class IntegrationService:
         settings_store: SettingsStore,
         credential_store: SecretStore,
         health_checker: NodeHealthChecker,
-        client_factory=None,
         transport=None,
         refresher=None,
     ):
@@ -31,9 +30,6 @@ class IntegrationService:
         self.refresher = refresher
         self._last_auto_refresh = 0.0
         self._auto_refresh_in_flight = False
-        self.client_factory = client_factory or (
-            lambda base_url, secret: OpenClashClient(base_url, secret, transport=self.transport)
-        )
 
     def _client(self, settings: RuntimeSettings) -> OpenClashClient | None:
         if not settings.openclash_enabled:
@@ -45,7 +41,7 @@ class IntegrationService:
         if not secret:
             logger.warning("openclash push skipped: api secret is not configured")
             return None
-        return self.client_factory(settings.openclash_api_url, secret)
+        return OpenClashClient(settings.openclash_api_url, secret, transport=self.transport)
 
     async def run_health(self, settings: RuntimeSettings | None = None) -> HealthSummary:
         current = settings or self.settings_store.get()

@@ -44,10 +44,6 @@ def _client(app):
         yield test_client
 
 
-def test_openclash_credentials_roundtrip(tmp_path):
-        yield test_client
-
-
 def test_build_services_preserves_runtime_settings_when_lan_base_url_empty(tmp_path):
     config = _app_settings(tmp_path)
     first = build_services(config)

@@ -238,8 +238,6 @@ class UpstreamRefresher:
         username: str,
         password: str,
     ) -> CredentialUpdateResult:
-        if not username.strip() or not password:
-            return CredentialUpdateResult(False, 0, "invalid_credentials")
         async with self._lock:
             result = await self._update_protocol_credentials_locked(username, password)
         if result.ok:

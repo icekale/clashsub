@@ -44,7 +44,7 @@ class RecordingClient(OpenClashClient):
 
 
 @pytest.mark.asyncio
-async def test_sync_after_refresh_pushes_provider(tmp_path):
+async def test_sync_after_refresh_pushes_provider(tmp_path, monkeypatch):
     db = _db(tmp_path)
     store = SettingsStore(db)
     store.update(RuntimeSettings(openclash_enabled=True, openclash_api_url="http://192.168.1.1:9090", openclash_provider="Provider_988009"))
@@ -61,12 +61,11 @@ async def test_sync_after_refresh_pushes_provider(tmp_path):
 
     fake_health = FakeHealth()
     calls = []
-    integration = IntegrationService(
-        store,
-        credentials,
-        fake_health,
-        client_factory=lambda base, secret: RecordingClient(calls),
+    monkeypatch.setattr(
+        "clashsub.integration.OpenClashClient",
+        lambda *args, **kwargs: RecordingClient(calls),
     )
+    integration = IntegrationService(store, credentials, fake_health)
     await integration.sync_after_refresh()
 
     assert calls == ["Provider_988009"]
@@ -74,23 +73,26 @@ async def test_sync_after_refresh_pushes_provider(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_sync_skips_push_without_secret(tmp_path):
+async def test_sync_skips_push_without_secret(tmp_path, monkeypatch):
     db = _db(tmp_path)
     store = SettingsStore(db)
     store.update(RuntimeSettings(openclash_enabled=True, openclash_api_url="http://192.168.1.1:9090", openclash_provider="Provider_988009"))
     calls = []
+    monkeypatch.setattr(
+        "clashsub.integration.OpenClashClient",
+        lambda *args, **kwargs: RecordingClient(calls),
+    )
     integration = IntegrationService(
         store,
         SecretStore(db, _key_file(tmp_path)),
         NodeHealthChecker(db, CacheFiles(tmp_path / "cache")),
-        client_factory=lambda base, secret: RecordingClient(calls),
     )
     await integration.sync_after_refresh()
     assert calls == []
 
 
 @pytest.mark.asyncio
-async def test_push_failure_is_swallowed(tmp_path):
+async def test_push_failure_is_swallowed(tmp_path, monkeypatch):
     db = _db(tmp_path)
     store = SettingsStore(db)
     store.update(RuntimeSettings(openclash_enabled=True, openclash_api_url="http://192.168.1.1:9090", openclash_provider="Provider_988009"))
@@ -101,17 +103,20 @@ async def test_push_failure_is_swallowed(tmp_path):
         async def refresh_provider(self, name):
             raise OpenClashError("unauthorized")
 
+    monkeypatch.setattr(
+        "clashsub.integration.OpenClashClient",
+        lambda *args, **kwargs: FailingClient(),
+    )
     integration = IntegrationService(
         store,
         credentials,
         NodeHealthChecker(db, CacheFiles(tmp_path / "cache")),
-        client_factory=lambda base, secret: FailingClient(),
     )
     await integration.sync_after_refresh()  # must not raise
 
 
 @pytest.mark.asyncio
-async def test_sync_runs_health_when_enabled(tmp_path):
+async def test_sync_runs_health_when_enabled(tmp_path, monkeypatch):
     db = _db(tmp_path)
     store = SettingsStore(db)
     store.update(RuntimeSettings(openclash_enabled=True, openclash_api_url="http://192.168.1.1:9090", openclash_provider="Provider_988009", health_enabled=True, health_timeout_seconds=3))
@@ -130,12 +135,11 @@ async def test_sync_runs_health_when_enabled(tmp_path):
 
     fake_health = FakeHealth()
     calls = []
-    integration = IntegrationService(
-        store,
-        credentials,
-        fake_health,
-        client_factory=lambda base, secret: RecordingClient(calls),
+    monkeypatch.setattr(
+        "clashsub.integration.OpenClashClient",
+        lambda *args, **kwargs: RecordingClient(calls),
     )
+    integration = IntegrationService(store, credentials, fake_health)
     await integration.sync_after_refresh()
 
     assert fake_health.runs == 1

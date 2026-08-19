@@ -677,16 +677,6 @@ p {
   font-size: 12px;
 }
 
-.secret-dialog-backdrop {
-  position: fixed;
-  z-index: 50;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 12px;
-  background: oklch(0.180 0.018 220 / 0.62);
-}
-
 .secret-dialog {
   width: min(680px, calc(100vw - 24px));
   max-height: calc(100dvh - 24px);
