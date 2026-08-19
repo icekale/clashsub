@@ -67,7 +67,7 @@ def test_readme_prompts_for_secret_values_without_literal_password_examples():
     assert "read -r -s" in readme
     assert "AIRPORT_EMAIL_SECRET_FILE" in readme
     assert "AIRPORT_PASSWORD_SECRET_FILE" in readme
-    assert "icekale/clashsub" in readme
+    assert "ghcr.io/icekale/clashsub" in readme
     assert "replace-with-airport-password" not in readme
     assert "replace-with-a-long-random-password" not in readme
     assert "subscription/REPLACE_ME" not in readme
