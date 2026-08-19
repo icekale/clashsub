@@ -85,7 +85,7 @@ chmod 700 data
 docker compose up -d --build
 ```
 
-已发布镜像：`ghcr.io/icekale/clashsub:0.1.0`（`linux/amd64`、`linux/arm64`）。
+已发布镜像：`ghcr.io/icekale/clashsub:0.1.0`（`linux/amd64`）。
 
 打开 `http://NAS_IP:18080/app/` 登录，在“设置”中把“局域网 Base URL”设为客户端
 实际可访问的地址（例如 `http://NAS_IP:18080`）。
