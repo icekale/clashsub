@@ -20,9 +20,11 @@ RUN sed -i 's|http://deb.debian.org/debian|http://mirrors.tuna.tsinghua.edu.cn/d
     && rm -rf /var/lib/apt/lists/*
 RUN useradd --create-home --uid 10001 clashsub
 COPY pyproject.toml ./
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+RUN python -c 'import tomllib, pathlib; print("\n".join(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["dependencies"]))' \
+    | PIP_DEFAULT_TIMEOUT=300 PIP_RETRIES=10 pip install --no-cache-dir --index-url "$PIP_INDEX_URL" setuptools -r /dev/stdin
 COPY src/ ./src/
-ARG PIP_INDEX_URL=https://pypi.org/simple
-RUN PIP_DEFAULT_TIMEOUT=300 PIP_RETRIES=10 pip install --no-cache-dir --index-url "$PIP_INDEX_URL" .
+RUN pip install --no-cache-dir --no-deps --no-build-isolation .
 COPY --from=frontend-build /frontend/dist /app/frontend/dist
 COPY LICENSE THIRD_PARTY_NOTICES.md /app/
 

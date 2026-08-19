@@ -47,6 +47,8 @@ def test_dockerfile_merges_converter_sidecar_into_runtime_image():
     assert "COPY --from=converter /base /base" in dockerfile
     assert "ENTRYPOINT" in dockerfile
     assert "docker-entrypoint.sh" in dockerfile
+    assert dockerfile.index("COPY src/") > dockerfile.index("pip install")
+    assert "pypi.tuna.tsinghua.edu.cn" in dockerfile
 
 
 def test_entrypoint_starts_sidecar_then_execs_main_command():
