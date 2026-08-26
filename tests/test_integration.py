@@ -42,6 +42,9 @@ class RecordingClient(OpenClashClient):
         self.calls.append(name)
         return {"updatedAt": "now"}
 
+    async def healthcheck_provider(self, name, timeout=None):
+        raise OpenClashError("network")
+
 
 @pytest.mark.asyncio
 async def test_sync_after_refresh_pushes_provider(tmp_path, monkeypatch):
@@ -275,6 +278,93 @@ class StubHealth:
 
     async def run_once(self, timeout_seconds=None):
         return self.summary
+
+
+def _publish_nodes(tmp_path, db, names):
+    cache = CacheFiles(tmp_path / "cache")
+    lines = ["proxies:\n"]
+    for name in names:
+        lines.append(
+            f"  - {{name: {name}, type: ss, server: 127.0.0.1, port: 1}}\n"
+        )
+    digest = cache.publish_raw("".join(lines).encode(), {})
+    db.record_refresh_success(digest, len(names), "yaml", {}, time.time(), "test")
+    return cache
+
+
+@pytest.mark.asyncio
+async def test_run_health_uses_openclash_provider_delays(tmp_path, monkeypatch):
+    db = _db(tmp_path)
+    cache = _publish_nodes(tmp_path, db, ["ok", "dead"])
+    store = SettingsStore(db)
+    store.update(
+        RuntimeSettings(
+            health_enabled=True,
+            openclash_enabled=True,
+            openclash_api_url="http://192.168.1.1:9090",
+            openclash_provider="Provider_988009",
+        )
+    )
+    credentials = SecretStore(db, _key_file(tmp_path))
+    credentials.put("openclash_api_secret", "top-secret")
+
+    class DelayClient:
+        async def healthcheck_provider(self, name, timeout=None):
+            assert name == "Provider_988009"
+            return {"ok": 90, "dead": 0}
+
+    monkeypatch.setattr(
+        "clashsub.integration.OpenClashClient",
+        lambda *args, **kwargs: DelayClient(),
+    )
+    checker = NodeHealthChecker(db, cache)
+
+    async def should_not_handshake(timeout_seconds=None):
+        raise AssertionError("handshake must not run when provider delays work")
+
+    checker.run_once = should_not_handshake
+    integration = IntegrationService(store, credentials, checker)
+    summary = await integration.run_health()
+
+    assert (summary.total, summary.online) == (2, 1)
+    rows = {row["name"]: row for row in db.list_node_health()}
+    assert rows["ok"]["ok"] == 1
+    assert rows["dead"]["ok"] == 0
+
+
+@pytest.mark.asyncio
+async def test_run_health_falls_back_to_handshake_when_openclash_fails(tmp_path, monkeypatch):
+    db = _db(tmp_path)
+    cache = _publish_nodes(tmp_path, db, ["ss"])
+    store = SettingsStore(db)
+    store.update(
+        RuntimeSettings(
+            health_enabled=True,
+            openclash_enabled=True,
+            openclash_api_url="http://192.168.1.1:9090",
+            openclash_provider="Provider_988009",
+        )
+    )
+    credentials = SecretStore(db, _key_file(tmp_path))
+    credentials.put("openclash_api_secret", "top-secret")
+
+    class FailingDelayClient:
+        async def healthcheck_provider(self, name, timeout=None):
+            raise OpenClashError("http_503")
+
+    monkeypatch.setattr(
+        "clashsub.integration.OpenClashClient",
+        lambda *args, **kwargs: FailingDelayClient(),
+    )
+    async def resolver(hostname, port):
+        return ("127.0.0.1",)
+
+    checker = NodeHealthChecker(db, cache, resolver=resolver, timeout_seconds=1)
+    integration = IntegrationService(store, credentials, checker)
+    summary = await integration.run_health()
+
+    assert summary.total == 1
+    assert summary.online == 0
 
 
 @pytest.mark.asyncio

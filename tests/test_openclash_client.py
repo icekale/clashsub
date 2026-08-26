@@ -105,6 +105,62 @@ async def test_network_error_raises_openclash_error():
 
 
 @pytest.mark.asyncio
+async def test_healthcheck_provider_triggers_then_reads_delays():
+    calls = []
+
+    def handler(request):
+        calls.append((request.method, request.url.path))
+        if request.url.path.endswith("/healthcheck"):
+            return httpx.Response(204)
+        return httpx.Response(
+            200,
+            json={
+                "name": "Provider_988009",
+                "testUrl": "https://www.gstatic.com/generate_204",
+                "proxies": [
+                    {"name": "OK Node", "history": [{"delay": 120}]},
+                    {"name": "Dead Node", "history": [{"delay": 0}]},
+                    {"name": "No History", "alive": False},
+                ],
+            },
+        )
+
+    client = OpenClashClient(
+        "http://192.168.1.1:9090",
+        "secret",
+        transport=httpx.MockTransport(handler),
+    )
+    assert await client.healthcheck_provider("Provider_988009") == {
+        "OK Node": 120,
+        "Dead Node": 0,
+        "No History": 0,
+    }
+    assert calls == [
+        ("GET", "/providers/proxies/Provider_988009/healthcheck"),
+        ("GET", "/providers/proxies/Provider_988009"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_healthcheck_provider_rejects_missing_test_url():
+    def handler(request):
+        if request.url.path.endswith("/healthcheck"):
+            return httpx.Response(204)
+        return httpx.Response(
+            200,
+            json={"name": "Provider_988009", "testUrl": "", "proxies": [{"name": "n", "history": []}]},
+        )
+
+    client = OpenClashClient(
+        "http://192.168.1.1:9090",
+        "secret",
+        transport=httpx.MockTransport(handler),
+    )
+    with pytest.raises(OpenClashError, match="healthcheck url"):
+        await client.healthcheck_provider("Provider_988009")
+
+
+@pytest.mark.asyncio
 async def test_invalid_provider_name_rejected():
     client = OpenClashClient("http://192.168.1.1:9090", "secret")
     with pytest.raises(OpenClashError, match="provider"):

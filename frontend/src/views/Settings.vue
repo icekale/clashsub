@@ -598,7 +598,7 @@ onMounted(load)
       <div class="settings-switch-row">
         <div>
           <strong>节点健康检查</strong>
-          <span>按间隔探测节点连通性（TCP/TLS 握手）。UDP 节点会跳过，不标离线。结果用于 WebUI 和分享页的「仅健康节点」链接（/clash-ha）；智能链接只按客户端选格式。</span>
+          <span>优先用 OpenClash 内核出站测速（含 UDP 节点）；核心不可用时回退 TCP/TLS 握手，此时 UDP 节点会跳过。结果用于 WebUI 和「仅健康节点」链接（/clash-ha）。</span>
         </div>
         <n-switch v-model:value="form.health_enabled" aria-label="节点健康检查" />
       </div>

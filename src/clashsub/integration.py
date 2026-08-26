@@ -55,10 +55,33 @@ class IntegrationService:
         current = settings or self.settings_store.get()
         if not current.health_enabled:
             return HealthSummary(0, 0, None)
-        summary = await self.health_checker.run_once(
-            timeout_seconds=current.health_timeout_seconds
-        )
+        summary = await self._health_from_openclash(current)
+        if summary is None:
+            summary = await self.health_checker.run_once(
+                timeout_seconds=current.health_timeout_seconds
+            )
         await self._maybe_auto_refresh(current, summary)
+        return summary
+
+    async def _health_from_openclash(self, settings: RuntimeSettings) -> HealthSummary | None:
+        provider = settings.openclash_provider.strip()
+        if not settings.openclash_enabled or not provider:
+            return None
+        client = self._client(settings)
+        if client is None:
+            return None
+        try:
+            delays = await client.healthcheck_provider(
+                provider,
+                timeout=max(60.0, settings.health_timeout_seconds * 20),
+            )
+        except OpenClashError as exc:
+            logger.warning("openclash healthcheck failed: %s", exc)
+            return None
+        summary = self.health_checker.record_outbound_delays(delays)
+        if summary.total == 0:
+            logger.warning("openclash healthcheck unmatched, falling back to handshake")
+            return None
         return summary
 
     async def _maybe_auto_refresh(self, settings: RuntimeSettings, summary: HealthSummary) -> None:
@@ -96,21 +119,20 @@ class IntegrationService:
     async def sync_after_refresh(self) -> None:
         settings = self.settings_store.get()
         try:
+            client = self._client(settings)
+            if client is not None:
+                try:
+                    await client.refresh_provider(settings.openclash_provider.strip())
+                    logger.info(
+                        "openclash provider refreshed provider=%s",
+                        settings.openclash_provider.strip(),
+                    )
+                except OpenClashError as exc:
+                    logger.warning("openclash push failed: %s", exc)
             if settings.health_enabled:
                 await self.run_health(settings)
-            client = self._client(settings)
-            if client is None:
-                return
-            try:
-                await client.refresh_provider(settings.openclash_provider.strip())
-                logger.info(
-                    "openclash provider refreshed provider=%s",
-                    settings.openclash_provider.strip(),
-                )
-            except OpenClashError as exc:
-                logger.warning("openclash push failed: %s", exc)
             subscribe = settings.openclash_subscribe_name.strip()
-            if not subscribe:
+            if client is None or not subscribe:
                 return
             try:
                 await client.update_config_subscribe(subscribe)

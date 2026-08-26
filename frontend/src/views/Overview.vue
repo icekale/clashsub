@@ -226,7 +226,7 @@ onMounted(load)
       <div class="panel-heading">
         <div>
           <h2 id="health-facts-heading">节点健康</h2>
-          <p>探测结果来自 ClashSub 自身的连通性检查（TCP/TLS 握手）。</p>
+          <p>优先用 OpenClash 内核出站测速；核心不可用时回退为 TCP/TLS 握手。</p>
         </div>
         <n-button secondary :loading="checkingHealth" @click="runHealthNow">
           立即检查

@@ -75,6 +75,34 @@ class OpenClashClient:
             pass
         return result
 
+    async def healthcheck_provider(self, name: str, timeout: float | None = None) -> dict[str, int]:
+        name = _safe_name(name, "provider")
+        wait = 120.0 if timeout is None else timeout
+        await self._request("GET", f"/providers/proxies/{name}/healthcheck", timeout=wait)
+        payload = await self._request("GET", f"/providers/proxies/{name}")
+        if not str((payload or {}).get("testUrl") or "").strip():
+            raise OpenClashError("healthcheck url missing")
+        proxies = payload.get("proxies") if isinstance(payload, dict) else None
+        if not isinstance(proxies, list) or not proxies:
+            raise OpenClashError("empty provider")
+        delays: dict[str, int] = {}
+        for proxy in proxies:
+            if not isinstance(proxy, dict):
+                continue
+            node = str(proxy.get("name", "")).strip()
+            if not node:
+                continue
+            delay = 0
+            history = proxy.get("history")
+            if isinstance(history, list) and history and isinstance(history[-1], dict):
+                raw = history[-1].get("delay")
+                if isinstance(raw, int | float) and raw > 0:
+                    delay = int(raw)
+            delays[node] = delay
+        if not delays:
+            raise OpenClashError("empty provider")
+        return delays
+
     async def update_config_subscribe(self, name: str) -> None:
         name = _safe_name(name, "subscribe")
         if not ssh_key_usable(self.ssh_key_file):
@@ -115,12 +143,12 @@ class OpenClashClient:
         if proc.returncode != 0:
             raise OpenClashError("ssh failed")
 
-    async def _request(self, method: str, path: str, params=None) -> dict:
+    async def _request(self, method: str, path: str, params=None, timeout: float | None = None) -> dict:
         headers = {"Authorization": f"Bearer {self.secret}"}
         try:
             async with httpx.AsyncClient(
                 transport=self.transport,
-                timeout=self.timeout,
+                timeout=self.timeout if timeout is None else timeout,
             ) as client:
                 response = await client.request(
                     method,

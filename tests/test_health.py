@@ -114,6 +114,33 @@ async def test_health_check_skips_udp_only_protocols(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_record_outbound_delays_includes_udp_nodes(tmp_path):
+    db = Database(tmp_path / "state.db")
+    db.initialize()
+    cache = CacheFiles(tmp_path / "cache")
+    payload = (
+        "proxies:\n"
+        "  - {name: hy2, type: hysteria2, server: 127.0.0.1, port: 1, password: pass}\n"
+        "  - {name: ss, type: ss, server: 127.0.0.1, port: 1}\n"
+        "  - {name: extra, type: ss, server: 127.0.0.1, port: 1}\n"
+    ).encode()
+    digest = cache.publish_raw(payload, {})
+    db.record_refresh_success(digest, 3, "yaml", {}, time.time(), "test")
+
+    checker = NodeHealthChecker(db, cache)
+    summary = checker.record_outbound_delays({"hy2": 80, "ss": 0, "orphan": 10})
+
+    assert summary.total == 2
+    assert summary.online == 1
+    rows = {row["name"]: row for row in db.list_node_health()}
+    assert rows["hy2"]["ok"] == 1
+    assert rows["hy2"]["latency_ms"] == 80
+    assert rows["ss"]["ok"] == 0
+    assert "extra" not in rows
+    assert "orphan" not in rows
+
+
+@pytest.mark.asyncio
 async def test_doh_resolver_extracts_a_records():
     def handler(request):
         return httpx.Response(

@@ -118,22 +118,48 @@ class NodeHealthChecker:
         self.timeout_seconds = timeout_seconds
         self._run_lock = asyncio.Lock()
 
+    def _load_proxies(self) -> list | None:
+        state = self.db.runtime_state()
+        digest = state["current_digest"] if state else None
+        if not digest:
+            return None
+        try:
+            snapshot = self.cache.read_raw(digest)
+            document = yaml.safe_load(snapshot.payload)
+        except (OSError, yaml.YAMLError, AttributeError):
+            return None
+        proxies = document.get("proxies") if isinstance(document, dict) else None
+        return proxies if isinstance(proxies, list) else None
+
+    def record_outbound_delays(self, delays: dict[str, int]) -> HealthSummary:
+        proxies = self._load_proxies()
+        if not proxies:
+            return HealthSummary(0, 0, None)
+        checked_at = time.time()
+        records = []
+        for proxy in proxies:
+            if not isinstance(proxy, dict):
+                continue
+            name = str(proxy.get("name", "")).strip()
+            if not name or name not in delays:
+                continue
+            delay = delays[name]
+            ok = 1 if delay > 0 else 0
+            records.append((name, ok, float(delay) if ok else None, checked_at))
+        if not records:
+            return HealthSummary(0, 0, None)
+        self.db.replace_node_health(records)
+        online = sum(1 for _, ok, _, _ in records if ok)
+        logger.info("node health from openclash total=%d online=%d", len(records), online)
+        return HealthSummary(len(records), online, checked_at)
+
     async def run_once(self, timeout_seconds: float | None = None) -> HealthSummary:
         async with self._run_lock:
             return await self._run_once_locked(timeout_seconds)
 
     async def _run_once_locked(self, timeout_seconds: float | None = None) -> HealthSummary:
-        state = self.db.runtime_state()
-        digest = state["current_digest"] if state else None
-        if not digest:
-            return HealthSummary(0, 0, None)
-        try:
-            snapshot = self.cache.read_raw(digest)
-            document = yaml.safe_load(snapshot.payload)
-        except (OSError, yaml.YAMLError, AttributeError):
-            return HealthSummary(0, 0, None)
-        proxies = document.get("proxies") if isinstance(document, dict) else None
-        if not isinstance(proxies, list):
+        proxies = self._load_proxies()
+        if proxies is None:
             return HealthSummary(0, 0, None)
 
         semaphore = asyncio.Semaphore(self.max_concurrency)
