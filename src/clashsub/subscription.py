@@ -95,6 +95,33 @@ def validate_subscription(payload: bytes, max_bytes: int) -> ValidatedSubscripti
 
 
 SAFE_RESPONSE_HEADERS = {"subscription-userinfo", "profile-update-interval"}
+_USERINFO_KEYS = {"upload", "download", "total", "expire"}
+
+
+def parse_subscription_userinfo(header: str | None) -> dict[str, int | None] | None:
+    if not header:
+        return None
+    values: dict[str, int] = {}
+    for part in header.split(";"):
+        if "=" not in part:
+            continue
+        key, raw = part.split("=", 1)
+        key = key.strip().lower()
+        raw = raw.strip()
+        if key in _USERINFO_KEYS and raw.isdigit():
+            values[key] = int(raw)
+    if not values:
+        return None
+    used = None
+    if "upload" in values or "download" in values:
+        used = values.get("upload", 0) + values.get("download", 0)
+    return {
+        "upload": values.get("upload"),
+        "download": values.get("download"),
+        "used": used,
+        "total": values.get("total"),
+        "expire_at": values.get("expire"),
+    }
 MAX_REDIRECTS = 3
 # 整个下载流程（含重定向、DNS 重解析）的总墙钟时限，防止慢速滴流占用刷新锁。
 DOWNLOAD_TOTAL_DEADLINE = 60.0

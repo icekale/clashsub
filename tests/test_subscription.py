@@ -10,6 +10,7 @@ from clashsub.cache_files import CacheFiles
 from clashsub.db import Database
 from clashsub.sources import StaticUrlSource
 from clashsub.subscription import InvalidSubscription, validate_subscription
+from clashsub import subscription
 from clashsub.subscription import UpstreamRefresher
 from pydantic import SecretStr
 
@@ -565,3 +566,28 @@ async def test_download_rejects_malformed_or_ambiguous_urls(tmp_path, url):
     result = await _refresher(tmp_path, url, httpx.MockTransport(unexpected_request)).refresh()
 
     assert result.updated is False
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        (None, None),
+        ("", None),
+        ("not-a-userinfo", None),
+        ("upload=abc; total=xyz", None),
+        (
+            "upload=1; download=2; total=3; expire=1900000000",
+            {"upload": 1, "download": 2, "used": 3, "total": 3, "expire_at": 1_900_000_000},
+        ),
+        (
+            " Upload = 1 ; Download = 2 ",
+            {"upload": 1, "download": 2, "used": 3, "total": None, "expire_at": None},
+        ),
+        (
+            "download=8; expire=0",
+            {"upload": None, "download": 8, "used": 8, "total": None, "expire_at": 0},
+        ),
+    ],
+)
+def test_parse_subscription_userinfo(header, expected):
+    assert subscription.parse_subscription_userinfo(header) == expected

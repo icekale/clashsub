@@ -149,6 +149,29 @@ def test_overview_includes_redacted_protocol_runtime_status(client):
     assert overview["protocol_last_subscribe_at"] is None
     assert overview["protocol_subscription_expires_at"] is None
     assert overview["protocol_last_error_category"] is None
+    assert overview["subscription_usage"] is None
+
+
+def test_overview_exposes_parsed_subscription_userinfo(client):
+    login(client)
+    client.app.state.services.db.record_refresh_success(
+        "digest",
+        2,
+        "yaml",
+        {"subscription-userinfo": "upload=1; download=2; total=3; expire=1900000000"},
+        1_800_000_000,
+        "protocol",
+    )
+
+    overview = client.get("/api/admin/overview").json()
+
+    assert overview["subscription_usage"] == {
+        "upload": 1,
+        "download": 2,
+        "used": 3,
+        "total": 3,
+        "expire_at": 1_900_000_000,
+    }
 
 
 def test_upstream_test_requires_csrf_and_never_returns_url(app_settings):

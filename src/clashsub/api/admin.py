@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from ..events import read_recent_events
 from ..events import get_logger
 from ..integration import OPENCLASH_SECRET_NAME
+from ..subscription import parse_subscription_userinfo
 from ..openclash_client import OpenClashClient, OpenClashError
 from ..secret_store import SecretStoreUnavailable
 from ..settings import RuntimeSettings, validate_http_origin
@@ -117,6 +118,9 @@ def overview(request: Request):
         "consecutive_failures": state["consecutive_failures"],
         "last_error": state["last_error"],
         "converter_enabled": converter_enabled,
+        "subscription_usage": parse_subscription_userinfo(
+            json.loads(state["safe_headers_json"] or "{}").get("subscription-userinfo")
+        ),
     }
 
 

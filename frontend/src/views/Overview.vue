@@ -58,6 +58,15 @@ function formatSource(value) {
   return '尚无记录'
 }
 
+function formatBytes(value) {
+  if (value == null) return '—'
+  const gib = value / 1024 ** 3
+  if (gib >= 1) return `${gib.toFixed(2)} GiB`
+  const mib = value / 1024 ** 2
+  if (mib >= 1) return `${mib.toFixed(1)} MiB`
+  return `${value} B`
+}
+
 async function load() {
   // 首次加载显示骨架屏；已有数据时静默刷新，避免整页闪烁。
   if (!data.value) {
@@ -171,6 +180,10 @@ onMounted(load)
           <dt>缓存年龄</dt>
           <dd>{{ formatAge(data.last_success_at) }}</dd>
         </div>
+        <div v-if="data.subscription_usage">
+          <dt>机场流量</dt>
+          <dd>{{ formatBytes(data.subscription_usage.used) }} / {{ formatBytes(data.subscription_usage.total) }}</dd>
+        </div>
       </dl>
 
       <div class="timeline-facts">
@@ -193,6 +206,10 @@ onMounted(load)
         <div>
           <span>协议订阅到期</span>
           <strong>{{ formatDate(data.protocol_subscription_expires_at) }}</strong>
+        </div>
+        <div v-if="data.subscription_usage?.expire_at">
+          <span>用量到期</span>
+          <strong>{{ formatDate(data.subscription_usage.expire_at) }}</strong>
         </div>
         <div v-if="data.protocol_last_error_category">
           <span>协议错误类别</span>

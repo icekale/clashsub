@@ -79,6 +79,43 @@ describe('Overview', () => {
     expect(text).toContain(formatDate(loadedOverview.protocol_subscription_expires_at))
     expect(text).not.toContain('URL')
     expect(text).not.toContain('token')
+    expect(text).not.toContain('机场流量')
+    expect(text).not.toContain('用量到期')
+  })
+
+  it('shows cached subscription-userinfo traffic and expiry', async () => {
+    api.request
+      .mockResolvedValueOnce({
+        ...loadedOverview,
+        subscription_usage: {
+          upload: 1073741824,
+          download: 2147483648,
+          used: 3221225472,
+          total: 107374182400,
+          expire_at: 1_900_000_000,
+        },
+      })
+      .mockResolvedValueOnce({
+        enabled: false,
+        interval_seconds: 600,
+        night_enabled: false,
+        night_interval_seconds: 600,
+        night_start_hour: 0,
+        night_end_hour: 8,
+        timeout_seconds: 5,
+        checked_at: null,
+        total: 0,
+        online: 0,
+        nodes: [],
+      })
+    const wrapper = mount(Overview, { global: { stubs: viewStubs } })
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('机场流量')
+    expect(text).toContain('3.00 GiB / 100.00 GiB')
+    expect(text).toContain('用量到期')
+    expect(text).toContain(formatDate(1_900_000_000))
   })
 
   it('shows node health summary and offline nodes', async () => {
