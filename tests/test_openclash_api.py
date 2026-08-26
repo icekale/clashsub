@@ -96,6 +96,7 @@ def test_settings_roundtrip_includes_integration_fields(tmp_path):
             "openclash_enabled": True,
             "openclash_api_url": "http://192.168.1.1:9090",
             "openclash_provider": "Provider_988009",
+            "openclash_subscribe_name": "sep_bbdmfetch",
             "health_enabled": True,
             "health_interval_seconds": 900,
             "health_timeout_seconds": 8,
@@ -105,6 +106,7 @@ def test_settings_roundtrip_includes_integration_fields(tmp_path):
         saved = client.get("/api/admin/settings").json()
         assert saved["openclash_enabled"] is True
         assert saved["openclash_provider"] == "Provider_988009"
+        assert saved["openclash_subscribe_name"] == "sep_bbdmfetch"
         assert saved["health_interval_seconds"] == 900
         assert saved["health_timeout_seconds"] == 8
 

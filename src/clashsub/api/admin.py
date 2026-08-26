@@ -42,6 +42,7 @@ class RuntimeSettingsRequest(BaseModel):
     openclash_enabled: bool = False
     openclash_api_url: str = Field(default="", max_length=2048)
     openclash_provider: str = Field(default="", max_length=256)
+    openclash_subscribe_name: str = Field(default="", max_length=256)
     health_enabled: bool = False
     health_interval_seconds: int = Field(default=600, ge=30, le=86400)
     health_timeout_seconds: int = Field(default=5, ge=1, le=30)

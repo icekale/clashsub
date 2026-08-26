@@ -5,7 +5,8 @@
 - `airport_email` 与 `airport_password`：可选的官方客户端 API 登录凭据，必须同时配置；
 - `upstream_url`：可选的手工订阅 URL 备用源；禁用时保留为空文件；
 - `admin_username`：首次启动时创建的管理员用户名；
-- `admin_password`：首次启动时创建的管理员密码。
+- `admin_password`：首次启动时创建的管理员密码；
+- `openclash_ssh_key`：可选。只读 SSH 私钥，用于刷新后更新 OpenClash 配置订阅。
 
 管理员文件和 `upstream_url` 文件必需，协议源与手工 URL 至少启用一个；
 `upstream_url` 的内容可以为空。fallback-only 模式不需要创建机场文件，Compose

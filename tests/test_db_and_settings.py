@@ -62,6 +62,7 @@ def test_integration_settings_defaults(tmp_path: Path):
     assert settings.openclash_enabled is False
     assert settings.openclash_api_url == ""
     assert settings.openclash_provider == ""
+    assert settings.openclash_subscribe_name == ""
     assert settings.health_enabled is False
     assert settings.health_interval_seconds == 600
     assert settings.health_timeout_seconds == 5
@@ -81,6 +82,13 @@ def test_openclash_enabled_requires_url_and_provider():
         openclash_provider="Provider_988009",
     ).validated()
     assert settings.openclash_api_url == "http://192.168.1.1:9090"
+
+
+def test_openclash_subscribe_name_must_be_safe():
+    with pytest.raises(ValueError, match="subscribe"):
+        RuntimeSettings(openclash_subscribe_name="sep_bbdmfetch.yaml;reboot").validated()
+    settings = RuntimeSettings(openclash_subscribe_name=" sep_bbdmfetch ").validated()
+    assert settings.openclash_subscribe_name == "sep_bbdmfetch"
 
 
 def test_openclash_url_rejects_unsafe_origins():
@@ -198,6 +206,7 @@ def test_integration_settings_persist_roundtrip(tmp_path: Path):
             openclash_enabled=True,
             openclash_api_url="http://192.168.1.1:9090",
             openclash_provider="Provider_988009",
+            openclash_subscribe_name="sep_bbdmfetch",
             health_enabled=True,
             health_interval_seconds=900,
             health_timeout_seconds=8,
@@ -210,6 +219,7 @@ def test_integration_settings_persist_roundtrip(tmp_path: Path):
     loaded = store.get()
     assert loaded.openclash_enabled is True
     assert loaded.openclash_provider == "Provider_988009"
+    assert loaded.openclash_subscribe_name == "sep_bbdmfetch"
     assert loaded.health_interval_seconds == 900
     assert loaded.health_timeout_seconds == 8
     assert loaded.health_night_enabled is True

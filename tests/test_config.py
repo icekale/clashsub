@@ -55,6 +55,22 @@ def test_encryption_key_file_is_configured_without_exposing_key(
     assert "k" * 32 not in repr(settings)
 
 
+def test_openclash_ssh_key_file_is_optional(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _set_admin_secrets(monkeypatch, tmp_path)
+    monkeypatch.setenv("UPSTREAM_URL_FILE", _write(tmp_path / "upstream", "https://provider.invalid/sub"))
+    monkeypatch.delenv("OPENCLASH_SSH_KEY_FILE", raising=False)
+    assert Settings.from_env().openclash_ssh_key_file is None
+
+    key_path = tmp_path / "openclash_ssh_key"
+    key_path.write_text("ssh-ed25519 AAAA", encoding="utf-8")
+    monkeypatch.setenv("OPENCLASH_SSH_KEY_FILE", str(key_path))
+    settings = Settings.from_env()
+    assert settings.openclash_ssh_key_file == key_path
+    assert "AAAA" not in repr(settings)
+
+
 def test_converter_urls_are_read_from_environment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):

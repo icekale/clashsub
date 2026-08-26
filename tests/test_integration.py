@@ -73,6 +73,120 @@ async def test_sync_after_refresh_pushes_provider(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_sync_after_refresh_updates_config_subscribe(tmp_path, monkeypatch):
+    db = _db(tmp_path)
+    store = SettingsStore(db)
+    store.update(
+        RuntimeSettings(
+            openclash_enabled=True,
+            openclash_api_url="http://192.168.1.1:9090",
+            openclash_provider="Provider_988009",
+            openclash_subscribe_name="sep_bbdmfetch",
+        )
+    )
+    credentials = SecretStore(db, _key_file(tmp_path))
+    credentials.put("openclash_api_secret", "top-secret")
+    key = tmp_path / "id_ed25519"
+    key.write_text("ssh-key", encoding="utf-8")
+    calls = []
+
+    class RecordingSubscribeClient:
+        async def refresh_provider(self, name):
+            calls.append(name)
+            return {"updatedAt": "now"}
+
+        async def update_config_subscribe(self, name):
+            calls.append(f"subscribe:{name}")
+
+    monkeypatch.setattr(
+        "clashsub.integration.OpenClashClient",
+        lambda *args, **kwargs: RecordingSubscribeClient(),
+    )
+    integration = IntegrationService(
+        store,
+        credentials,
+        NodeHealthChecker(db, CacheFiles(tmp_path / "cache")),
+        ssh_key_file=key,
+    )
+    await integration.sync_after_refresh()
+    assert calls == ["Provider_988009", "subscribe:sep_bbdmfetch"]
+
+
+@pytest.mark.asyncio
+async def test_sync_skips_subscribe_without_name(tmp_path, monkeypatch):
+    db = _db(tmp_path)
+    store = SettingsStore(db)
+    store.update(
+        RuntimeSettings(
+            openclash_enabled=True,
+            openclash_api_url="http://192.168.1.1:9090",
+            openclash_provider="Provider_988009",
+        )
+    )
+    credentials = SecretStore(db, _key_file(tmp_path))
+    credentials.put("openclash_api_secret", "top-secret")
+    calls = []
+
+    class RecordingSubscribeClient:
+        async def refresh_provider(self, name):
+            calls.append(name)
+            return {"updatedAt": "now"}
+
+        async def update_config_subscribe(self, name):
+            calls.append(f"subscribe:{name}")
+
+    monkeypatch.setattr(
+        "clashsub.integration.OpenClashClient",
+        lambda *args, **kwargs: RecordingSubscribeClient(),
+    )
+    integration = IntegrationService(
+        store,
+        credentials,
+        NodeHealthChecker(db, CacheFiles(tmp_path / "cache")),
+        ssh_key_file=tmp_path / "id_ed25519",
+    )
+    await integration.sync_after_refresh()
+    assert calls == ["Provider_988009"]
+
+
+@pytest.mark.asyncio
+async def test_subscribe_failure_is_swallowed(tmp_path, monkeypatch):
+    db = _db(tmp_path)
+    store = SettingsStore(db)
+    store.update(
+        RuntimeSettings(
+            openclash_enabled=True,
+            openclash_api_url="http://192.168.1.1:9090",
+            openclash_provider="Provider_988009",
+            openclash_subscribe_name="sep_bbdmfetch",
+        )
+    )
+    credentials = SecretStore(db, _key_file(tmp_path))
+    credentials.put("openclash_api_secret", "top-secret")
+    key = tmp_path / "id_ed25519"
+    key.write_text("ssh-key", encoding="utf-8")
+
+    class FailingSubscribeClient:
+        async def refresh_provider(self, name):
+            return {"updatedAt": "now"}
+
+        async def update_config_subscribe(self, name):
+            raise OpenClashError("ssh failed")
+
+    monkeypatch.setattr(
+        "clashsub.integration.OpenClashClient",
+        lambda *args, **kwargs: FailingSubscribeClient(),
+    )
+    integration = IntegrationService(
+        store,
+        credentials,
+        NodeHealthChecker(db, CacheFiles(tmp_path / "cache")),
+        ssh_key_file=key,
+    )
+    await integration.sync_after_refresh()
+
+
+@pytest.mark.asyncio
 async def test_sync_skips_push_without_secret(tmp_path, monkeypatch):
     db = _db(tmp_path)
     store = SettingsStore(db)

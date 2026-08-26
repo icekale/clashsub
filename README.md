@@ -74,6 +74,7 @@ chmod 700 data
 | `AIRPORT_PASSWORD_SECRET_FILE` | - | 机场登录密码 Secret 路径 |
 | `UPSTREAM_URL_SECRET_FILE` | `./secrets/upstream_url` | 备用订阅 URL Secret 路径 |
 | `ENCRYPTION_KEY_SECRET_FILE` | `./secrets/encryption_key` | 主密钥 Secret 路径 |
+| `OPENCLASH_SSH_KEY_SECRET_FILE` | 空 | 可选。路由器 SSH 私钥，用于刷新后执行 OpenClash 配置订阅更新 |
 | `TRUSTED_PROXY_CIDRS` | 空 | 反向代理的精确 CIDR，用于信任转发头 |
 | `DOWNLOAD_ALLOWED_CIDRS` | 空 | OpenClash Fake-IP 环境设为 `198.18.0.0/15` |
 | `CONVERTER_BASE_URL` | `http://127.0.0.1:25500` | 转换服务地址（与主应用同容器） |
@@ -119,6 +120,7 @@ Unraid 部署要点（appdata 目录、权限、命名卷）以及通过 Lucky �
 1. 填写 OpenClash API 地址（默认 `http://192.168.1.1:9090`）、Provider 名称并保存
    API 密钥；
 2. 开启自动推送：每次上游刷新成功后立即通知 OpenClash 重新拉取 provider；
+   若填写了配置订阅名称并挂载了 SSH 私钥，还会在路由器上执行官方 `openclash.sh` 更新配置订阅；
 3. 开启节点健康检查：按间隔探测节点连通性（TCP/TLS 握手）；
 4. 开启“不可用时自动刷新缓存”：在线比例低于阈值时自动重新拉取上游缓存并再次推送，
    冷却时间防止频繁请求机场。

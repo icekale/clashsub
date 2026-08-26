@@ -18,6 +18,16 @@ def test_compose_allows_fallback_only_without_airport_secret_files():
     assert secrets["airport_email"]["file"] == "${AIRPORT_EMAIL_SECRET_FILE:-/dev/null}"
     assert secrets["airport_password"]["file"] == "${AIRPORT_PASSWORD_SECRET_FILE:-/dev/null}"
     assert secrets["upstream_url"]["file"] == "${UPSTREAM_URL_SECRET_FILE:-./secrets/upstream_url}"
+    assert environment["OPENCLASH_SSH_KEY_FILE"] == "/run/secrets/openclash_ssh_key"
+    assert secrets["openclash_ssh_key"]["file"] == "${OPENCLASH_SSH_KEY_SECRET_FILE:-/dev/null}"
+    ssh_secret = next(
+        item
+        for item in compose["services"]["clashsub"]["secrets"]
+        if isinstance(item, dict) and item.get("source") == "openclash_ssh_key"
+    )
+    assert ssh_secret["uid"] == "10001"
+    assert ssh_secret["gid"] == "10001"
+    assert ssh_secret["mode"] in {0o400, 400}
 
 
 def test_compose_runs_converter_inside_the_single_container():
@@ -86,6 +96,7 @@ def test_runtime_image_and_compose_use_asia_shanghai_timezone():
     compose = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
 
     assert "tzdata" in dockerfile
+    assert "openssh-client" in dockerfile
     assert "TZ=Asia/Shanghai" in dockerfile
     assert compose["services"]["clashsub"]["environment"]["TZ"] == "Asia/Shanghai"
 

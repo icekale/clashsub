@@ -1,3 +1,6 @@
+from clashsub.settings import RuntimeSettings
+
+
 def test_healthz_discloses_only_liveness(client):
     response = client.get("/healthz")
     assert response.status_code == 200
@@ -33,3 +36,33 @@ def test_raw_preserves_bytes_and_only_safe_headers(client):
     assert response.headers["subscription-userinfo"] == "upload=1"
     assert "set-cookie" not in response.headers
     assert response.headers["cache-control"] == "no-store"
+
+
+def test_raw_overrides_airport_profile_update_interval(client):
+    services = client.app.state.services
+    created = services.shares.create("local-test")
+    token = created.raw_url.rsplit("/", 1)[1]
+    digest = services.cache.publish_raw(
+        b"exact-upstream-bytes",
+        {"profile-update-interval": "24", "subscription-userinfo": "upload=1"},
+    )
+    services.db.record_refresh_success(
+        digest,
+        1,
+        "base64",
+        {"profile-update-interval": "24", "subscription-userinfo": "upload=1"},
+        100,
+        source="fallback",
+    )
+    services.runtime_settings.update(
+        RuntimeSettings(lan_base_url="http://testserver", refresh_interval_minutes=60)
+    )
+    hourly = client.get(f"/raw/{token}")
+    assert hourly.headers["profile-update-interval"] == "1"
+    assert hourly.headers["subscription-userinfo"] == "upload=1"
+
+    services.runtime_settings.update(
+        RuntimeSettings(lan_base_url="http://testserver", refresh_interval_minutes=360)
+    )
+    six_hours = client.get(f"/raw/{token}")
+    assert six_hours.headers["profile-update-interval"] == "6"

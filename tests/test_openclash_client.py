@@ -1,3 +1,6 @@
+import asyncio
+from pathlib import Path
+
 import httpx
 import pytest
 
@@ -18,12 +21,18 @@ async def test_version_returns_payload():
 
 @pytest.mark.asyncio
 async def test_refresh_provider_sends_force_put_with_bearer():
-    seen = {}
+    calls = []
 
     def handler(request):
-        seen["method"] = request.method
-        seen["url"] = str(request.url)
-        seen["auth"] = request.headers.get("authorization")
+        calls.append(
+            {
+                "method": request.method,
+                "url": str(request.url),
+                "auth": request.headers.get("authorization"),
+            }
+        )
+        if request.url.path.endswith("/cache/smart/flush"):
+            return httpx.Response(204)
         return httpx.Response(200, json={"updatedAt": "now"})
 
     client = OpenClashClient(
@@ -33,11 +42,41 @@ async def test_refresh_provider_sends_force_put_with_bearer():
     )
     result = await client.refresh_provider("Provider_988009")
     assert result == {"updatedAt": "now"}
-    assert seen == {
-        "method": "PUT",
-        "url": "http://192.168.1.1:9090/providers/proxies/Provider_988009?force=true",
-        "auth": "Bearer top-secret",
-    }
+    assert calls == [
+        {
+            "method": "PUT",
+            "url": "http://192.168.1.1:9090/providers/proxies/Provider_988009?force=true",
+            "auth": "Bearer top-secret",
+        },
+        {
+            "method": "POST",
+            "url": "http://192.168.1.1:9090/cache/smart/flush",
+            "auth": "Bearer top-secret",
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_refresh_provider_still_succeeds_when_smart_flush_missing():
+    calls = []
+
+    def handler(request):
+        calls.append(request.method + " " + request.url.path)
+        if request.url.path.endswith("/cache/smart/flush"):
+            return httpx.Response(404, text="not found")
+        return httpx.Response(200, json={"updatedAt": "now"})
+
+    client = OpenClashClient(
+        "http://192.168.1.1:9090",
+        "top-secret",
+        transport=httpx.MockTransport(handler),
+    )
+    result = await client.refresh_provider("Provider_988009")
+    assert result == {"updatedAt": "now"}
+    assert calls == [
+        "PUT /providers/proxies/Provider_988009",
+        "POST /cache/smart/flush",
+    ]
 
 
 @pytest.mark.asyncio
@@ -70,3 +109,126 @@ async def test_invalid_provider_name_rejected():
     client = OpenClashClient("http://192.168.1.1:9090", "secret")
     with pytest.raises(OpenClashError, match="provider"):
         await client.refresh_provider("bad/name")
+
+
+class _FakeProc:
+    def __init__(self, returncode=0, hang=False):
+        self.returncode = returncode
+        self.hang = hang
+        self.killed = False
+
+    async def communicate(self):
+        if self.hang:
+            await asyncio.sleep(3600)
+        return b"", b""
+
+    def kill(self):
+        self.killed = True
+        self.hang = False
+
+
+@pytest.mark.asyncio
+async def test_update_config_subscribe_runs_ssh(tmp_path, monkeypatch):
+    key = tmp_path / "id_ed25519"
+    key.write_text("ssh-key", encoding="utf-8")
+    key.chmod(0o600)
+    seen = {}
+
+    async def fake_exec(*args, **kwargs):
+        seen["args"] = args
+        return _FakeProc()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    client = OpenClashClient(
+        "http://192.168.5.1:9090",
+        "secret",
+        ssh_key_file=key,
+    )
+    await client.update_config_subscribe("sep_bbdmfetch")
+
+    assert seen["args"][0] == "ssh"
+    assert "-i" in seen["args"]
+    assert str(key) in seen["args"]
+    assert "root@192.168.5.1" in seen["args"]
+    assert seen["args"][-2:] == ("/usr/share/openclash/openclash.sh", "sep_bbdmfetch")
+
+
+@pytest.mark.asyncio
+async def test_update_config_subscribe_copies_world_readable_key(tmp_path, monkeypatch):
+    key = tmp_path / "id_ed25519"
+    key.write_text("ssh-key", encoding="utf-8")
+    key.chmod(0o644)
+    seen = {}
+
+    async def fake_exec(*args, **kwargs):
+        seen["args"] = args
+        return _FakeProc()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    client = OpenClashClient("http://192.168.5.1:9090", "secret", ssh_key_file=key)
+    await client.update_config_subscribe("sep_bbdmfetch")
+    copied = Path("/tmp/clashsub_openclash_ssh_key")
+    assert copied.is_file()
+    assert copied.stat().st_mode & 0o077 == 0
+    assert seen["args"][seen["args"].index("-i") + 1] == str(copied)
+    copied.unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
+async def test_update_config_subscribe_rejects_invalid_name(tmp_path):
+    key = tmp_path / "id_ed25519"
+    key.write_text("ssh-key", encoding="utf-8")
+    key.chmod(0o600)
+    client = OpenClashClient("http://192.168.5.1:9090", "secret", ssh_key_file=key)
+    with pytest.raises(OpenClashError, match="subscribe"):
+        await client.update_config_subscribe("sep_bbdmfetch.yaml;reboot")
+
+
+@pytest.mark.asyncio
+async def test_update_config_subscribe_requires_key(tmp_path):
+    client = OpenClashClient("http://192.168.5.1:9090", "secret")
+    with pytest.raises(OpenClashError, match="ssh key"):
+        await client.update_config_subscribe("sep_bbdmfetch")
+
+    empty = tmp_path / "empty"
+    empty.write_bytes(b"")
+    client = OpenClashClient("http://192.168.5.1:9090", "secret", ssh_key_file=empty)
+    with pytest.raises(OpenClashError, match="ssh key"):
+        await client.update_config_subscribe("sep_bbdmfetch")
+
+
+@pytest.mark.asyncio
+async def test_update_config_subscribe_nonzero_exit_raises(tmp_path, monkeypatch):
+    key = tmp_path / "id_ed25519"
+    key.write_text("ssh-key", encoding="utf-8")
+    key.chmod(0o600)
+
+    async def fake_exec(*args, **kwargs):
+        return _FakeProc(returncode=255)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    client = OpenClashClient("http://192.168.5.1:9090", "secret", ssh_key_file=key)
+    with pytest.raises(OpenClashError, match="ssh failed"):
+        await client.update_config_subscribe("sep_bbdmfetch")
+
+
+@pytest.mark.asyncio
+async def test_update_config_subscribe_timeout_kills_process(tmp_path, monkeypatch):
+    key = tmp_path / "id_ed25519"
+    key.write_text("ssh-key", encoding="utf-8")
+    key.chmod(0o600)
+    proc = _FakeProc(hang=True)
+
+    async def fake_exec(*args, **kwargs):
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    client = OpenClashClient(
+        "http://192.168.5.1:9090",
+        "secret",
+        ssh_key_file=key,
+        ssh_timeout=0.01,
+    )
+    with pytest.raises(OpenClashError, match="ssh timeout"):
+        await client.update_config_subscribe("sep_bbdmfetch")
+    assert proc.killed is True

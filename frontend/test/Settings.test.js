@@ -47,6 +47,7 @@ const loadedSettings = {
   openclash_enabled: false,
   openclash_api_url: '',
   openclash_provider: '',
+  openclash_subscribe_name: '',
   health_enabled: false,
   health_interval_seconds: 600,
   health_timeout_seconds: 5,

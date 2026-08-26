@@ -156,4 +156,4 @@ def test_converted_responses_forward_subscription_headers(app_settings):
             response = client.get(f"/{path}/{token}")
             assert response.status_code == 200
             assert response.headers["subscription-userinfo"] == safe_headers["subscription-userinfo"]
-            assert response.headers["profile-update-interval"] == safe_headers["profile-update-interval"]
+            assert response.headers["profile-update-interval"] == "1"

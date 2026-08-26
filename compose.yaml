@@ -15,6 +15,7 @@ services:
       ADMIN_USERNAME_FILE: /run/secrets/admin_username
       ADMIN_PASSWORD_FILE: /run/secrets/admin_password
       ENCRYPTION_KEY_FILE: /run/secrets/encryption_key
+      OPENCLASH_SSH_KEY_FILE: /run/secrets/openclash_ssh_key
       TRUSTED_PROXY_CIDRS: ""
       DOWNLOAD_ALLOWED_CIDRS: ${DOWNLOAD_ALLOWED_CIDRS:-}
       CONVERTER_BASE_URL: http://127.0.0.1:25500
@@ -26,6 +27,11 @@ services:
       - admin_username
       - admin_password
       - encryption_key
+      - source: openclash_ssh_key
+        target: openclash_ssh_key
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
     volumes:
       - ./data:/data
     tmpfs:
@@ -56,3 +62,5 @@ secrets:
     file: ./secrets/admin_password
   encryption_key:
     file: ${ENCRYPTION_KEY_SECRET_FILE:-./secrets/encryption_key}
+  openclash_ssh_key:
+    file: ${OPENCLASH_SSH_KEY_SECRET_FILE:-/dev/null}

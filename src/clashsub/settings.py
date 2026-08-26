@@ -15,6 +15,7 @@ class RuntimeSettings:
     openclash_enabled: bool = False
     openclash_api_url: str = ""
     openclash_provider: str = ""
+    openclash_subscribe_name: str = ""
     health_enabled: bool = False
     health_interval_seconds: int = 600
     health_timeout_seconds: int = 5
@@ -44,6 +45,15 @@ class RuntimeSettings:
             if not self.openclash_provider.strip():
                 raise ValueError("OpenClash provider name is required")
             object.__setattr__(self, "openclash_api_url", api_url)
+        subscribe = self.openclash_subscribe_name.strip()
+        if subscribe:
+            if (
+                not all(character.isalnum() or character in "_.-" for character in subscribe)
+                or subscribe in {".", ".."}
+                or ".." in subscribe
+            ):
+                raise ValueError("invalid OpenClash subscribe name")
+            object.__setattr__(self, "openclash_subscribe_name", subscribe)
         if not 30 <= self.health_interval_seconds <= 86400:
             raise ValueError("health check interval must be between 30 and 86400 seconds")
         if not 1 <= self.health_timeout_seconds <= 30:
@@ -107,6 +117,7 @@ class SettingsStore:
             openclash_enabled=values.get("openclash_enabled", "false") == "true",
             openclash_api_url=values.get("openclash_api_url", ""),
             openclash_provider=values.get("openclash_provider", ""),
+            openclash_subscribe_name=values.get("openclash_subscribe_name", ""),
             health_enabled=values.get("health_enabled", "false") == "true",
             health_interval_seconds=self._parse_int(values, "health_interval_seconds", 600),
             health_timeout_seconds=self._parse_int(values, "health_timeout_seconds", 5),

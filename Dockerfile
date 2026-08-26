@@ -16,7 +16,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 RUN sed -i 's|http://deb.debian.org/debian|http://mirrors.tuna.tsinghua.edu.cn/debian|g; s|http://security.debian.org/debian-security|http://mirrors.tuna.tsinghua.edu.cn/debian-security|g' /etc/apt/sources.list.d/debian.sources \
     && apt-get update \
-    && apt-get install -y --no-install-recommends tzdata ca-certificates libcurl4t64 libyaml-cpp0.8 libpcre2-8-0 libstdc++6 libgcc-s1 \
+    && apt-get install -y --no-install-recommends tzdata ca-certificates openssh-client libcurl4t64 libyaml-cpp0.8 libpcre2-8-0 libstdc++6 libgcc-s1 \
     && rm -rf /var/lib/apt/lists/*
 RUN useradd --create-home --uid 10001 clashsub
 COPY pyproject.toml ./

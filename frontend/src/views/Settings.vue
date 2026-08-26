@@ -42,6 +42,7 @@ const SETTINGS_DEFAULTS = {
   openclash_enabled: false,
   openclash_api_url: '',
   openclash_provider: '',
+  openclash_subscribe_name: '',
   health_enabled: false,
   health_interval_seconds: 600,
   health_timeout_seconds: 5,
@@ -503,7 +504,7 @@ onMounted(load)
       <div class="panel-heading">
         <div>
           <h2 id="openclash-settings-heading">OpenClash 联动与节点健康</h2>
-          <p>上游刷新成功后自动推送 OpenClash 重新拉取 provider；健康检查会定期探测节点并生成仅含可用节点的订阅。</p>
+          <p>上游刷新成功后自动推送 OpenClash 重新拉取 provider，并可按配置订阅名称 SSH 执行官方更新；健康检查会定期探测节点并生成仅含可用节点的订阅。</p>
         </div>
       </div>
 
@@ -539,6 +540,17 @@ onMounted(load)
             v-model:value="form.openclash_provider"
             :input-props="{ id: 'settings-openclash-provider' }"
             placeholder="Provider_988009"
+            maxlength="256"
+          />
+        </n-form-item>
+        <n-form-item
+          label="配置订阅名称"
+          :label-props="{ for: 'settings-openclash-subscribe' }"
+        >
+          <n-input
+            v-model:value="form.openclash_subscribe_name"
+            :input-props="{ id: 'settings-openclash-subscribe' }"
+            placeholder="sep_bbdmfetch"
             maxlength="256"
           />
         </n-form-item>

@@ -61,15 +61,25 @@ def _is_loopback(address: str) -> bool:
         return False
 
 
-def _cache_headers(snapshot) -> dict[str, str]:
+def _profile_update_interval_hours(refresh_interval_minutes: int) -> str:
+    return str(max(1, (refresh_interval_minutes + 59) // 60))
+
+
+def _cache_headers(snapshot, refresh_interval_minutes: int) -> dict[str, str]:
     try:
-        return {
+        headers = {
             key: value
             for key, value in snapshot.safe_headers.items()
             if key in _SAFE_HEADERS
         }
     except AttributeError:
-        return {}
+        headers = {}
+    # 机场常下发 24 小时；按 ClashSub 自己的刷新间隔覆盖，否则 OpenClash 会按
+    # profile-update-interval 把订阅当成一天一更。
+    headers["profile-update-interval"] = _profile_update_interval_hours(
+        refresh_interval_minutes
+    )
+    return headers
 
 
 async def _refresh_state(services):
@@ -99,7 +109,10 @@ async def _raw_response(request: Request, token: str, require_clash: bool = Fals
         raise HTTPException(404)
     state = await _refresh_state(services)
     snapshot = _read_raw(services, state["current_digest"] if state else None)
-    headers = {**_cache_headers(snapshot), "Cache-Control": "no-store"}
+    headers = {
+        **_cache_headers(snapshot, services.runtime_settings.get().refresh_interval_minutes),
+        "Cache-Control": "no-store",
+    }
     return Response(snapshot.payload, media_type="text/plain; charset=utf-8", headers=headers)
 
 
@@ -153,7 +166,10 @@ async def ha_subscription(token: str, request: Request):
     document["proxies"] = filtered
     _rewrite_proxy_groups(document, filtered)
     body = await asyncio.to_thread(yaml.safe_dump, document, allow_unicode=True, sort_keys=False)
-    headers = {**_cache_headers(snapshot), "Cache-Control": "no-store"}
+    headers = {
+        **_cache_headers(snapshot, settings.refresh_interval_minutes),
+        "Cache-Control": "no-store",
+    }
     return Response(body, media_type="text/plain; charset=utf-8", headers=headers)
 
 
@@ -188,7 +204,12 @@ async def _converted_subscription(token: str, request: Request, format: str):
     headers = {"Cache-Control": "no-store"}
     if source_digest:
         try:
-            headers.update(_cache_headers(services.cache.read_raw(source_digest)))
+            headers.update(
+                _cache_headers(
+                    services.cache.read_raw(source_digest),
+                    settings.refresh_interval_minutes,
+                )
+            )
         except OSError:
             pass
     return Response(body, media_type=media_type, headers=headers)

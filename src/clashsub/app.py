@@ -123,6 +123,7 @@ def build_services(config: Settings, transport=None, resolver=None) -> Services:
         credential_store,
         health_checker,
         transport=transport,
+        ssh_key_file=config.openclash_ssh_key_file,
     )
     refresher = UpstreamRefresher(
         db,

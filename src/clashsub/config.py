@@ -37,6 +37,11 @@ def _secret(name: str) -> SecretStr:
     return SecretStr(value)
 
 
+def _optional_path(name: str) -> Path | None:
+    raw_path = os.environ.get(name, "").strip()
+    return Path(raw_path) if raw_path else None
+
+
 def _optional_secret(name: str) -> SecretStr | None:
     raw_path = os.environ.get(name, "").strip()
     if not raw_path:
@@ -106,6 +111,7 @@ class Settings:
     converter_source_base_url: str = ""
     max_response_bytes: int = 8 * 1024 * 1024
     encryption_key_file: Path = Path("/run/secrets/encryption_key")
+    openclash_ssh_key_file: Path | None = None
 
     @property
     def protocol_configured(self) -> bool:
@@ -138,4 +144,5 @@ class Settings:
             converter_base_url=_service_url("CONVERTER_BASE_URL", "http://127.0.0.1:25500"),
             converter_source_base_url=_service_url("CONVERTER_SOURCE_BASE_URL"),
             encryption_key_file=Path(os.getenv("ENCRYPTION_KEY_FILE", "/run/secrets/encryption_key")),
+            openclash_ssh_key_file=_optional_path("OPENCLASH_SSH_KEY_FILE"),
         )

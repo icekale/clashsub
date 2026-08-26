@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 from .events import get_logger
 from .health import HealthSummary, NodeHealthChecker
@@ -22,12 +23,14 @@ class IntegrationService:
         health_checker: NodeHealthChecker,
         transport=None,
         refresher=None,
+        ssh_key_file: Path | None = None,
     ):
         self.settings_store = settings_store
         self.credential_store = credential_store
         self.health_checker = health_checker
         self.transport = transport
         self.refresher = refresher
+        self.ssh_key_file = ssh_key_file
         self._last_auto_refresh = 0.0
         self._auto_refresh_in_flight = False
 
@@ -41,7 +44,12 @@ class IntegrationService:
         if not secret:
             logger.warning("openclash push skipped: api secret is not configured")
             return None
-        return OpenClashClient(settings.openclash_api_url, secret, transport=self.transport)
+        return OpenClashClient(
+            settings.openclash_api_url,
+            secret,
+            transport=self.transport,
+            ssh_key_file=self.ssh_key_file,
+        )
 
     async def run_health(self, settings: RuntimeSettings | None = None) -> HealthSummary:
         current = settings or self.settings_store.get()
@@ -93,13 +101,22 @@ class IntegrationService:
             client = self._client(settings)
             if client is None:
                 return
-            await client.refresh_provider(settings.openclash_provider.strip())
-            logger.info(
-                "openclash provider refreshed provider=%s",
-                settings.openclash_provider.strip(),
-            )
-        except OpenClashError as exc:
-            logger.warning("openclash push failed: %s", exc)
+            try:
+                await client.refresh_provider(settings.openclash_provider.strip())
+                logger.info(
+                    "openclash provider refreshed provider=%s",
+                    settings.openclash_provider.strip(),
+                )
+            except OpenClashError as exc:
+                logger.warning("openclash push failed: %s", exc)
+            subscribe = settings.openclash_subscribe_name.strip()
+            if not subscribe:
+                return
+            try:
+                await client.update_config_subscribe(subscribe)
+                logger.info("openclash config subscribe updated name=%s", subscribe)
+            except OpenClashError as exc:
+                logger.warning("openclash subscribe failed: %s", exc)
         except Exception:
             logger.exception("integration sync failed")
 
