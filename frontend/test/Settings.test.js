@@ -403,4 +403,19 @@ describe('Settings', () => {
       body: expect.objectContaining({ backup_fail_threshold: 4 }),
     }))
   })
+
+  it('loads a yaml file into the backup textarea without saving', async () => {
+    mockInitialLoad()
+    const wrapper = mountSettings()
+    await flushPromises()
+    const yaml = '# keep\nproxies:\n  - name: bak\n    type: ss\n'
+    expect(wrapper.get('[data-testid="backup-yaml-import"]').exists()).toBe(true)
+    await wrapper.vm.importBackupYaml({ target: { files: [{ text: async () => yaml }], value: '' } })
+    await flushPromises()
+    expect(wrapper.vm.backupNodes).toBe(yaml)
+    expect(api.request).not.toHaveBeenCalledWith(
+      '/api/admin/backup-nodes',
+      expect.objectContaining({ method: 'PUT' }),
+    )
+  })
 })

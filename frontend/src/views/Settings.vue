@@ -276,6 +276,18 @@ async function saveSettings() {
   }
 }
 
+async function importBackupYaml(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+  try {
+    backupNodes.value = await file.text()
+    backupError.value = ''
+  } catch {
+    backupError.value = '无法读取文件'
+  }
+}
+
 async function saveBackup() {
   backupError.value = ''
   savingBackup.value = true
@@ -532,6 +544,14 @@ onMounted(load)
       </div>
 
       <n-form :model="form" label-placement="top" class="settings-form-grid">
+        <n-form-item label="导入 YAML">
+          <input
+            type="file"
+            accept=".yaml,.yml,.txt,text/yaml,text/plain"
+            data-testid="backup-yaml-import"
+            @change="importBackupYaml"
+          />
+        </n-form-item>
         <n-form-item label="备用节点">
           <n-input
             v-model:value="backupNodes"
