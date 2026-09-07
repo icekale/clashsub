@@ -70,6 +70,11 @@ const backupError = ref('')
 const backupCount = ref(0)
 const backupTextHidden = ref(false)
 const savingBackup = ref(false)
+const checkingBackup = ref(false)
+const backupCheck = ref(null)
+const backupOffline = computed(() =>
+  (backupCheck.value?.nodes || []).filter((node) => !node.ok && !node.skipped).map((node) => node.name).slice(0, 8),
+)
 function applyBackup(payload) {
   const nodes = payload.nodes || ''
   backupCount.value = payload.node_count || 0
@@ -306,6 +311,20 @@ async function importBackupYaml(event) {
   }
   event.target.value = ''
   savingBackup.value = false
+}
+
+async function checkBackup() {
+  checkingBackup.value = true
+  backupError.value = ''
+  try {
+    backupCheck.value = await api.request('/api/admin/backup-nodes/check', { method: 'POST' })
+    const result = backupCheck.value
+    message.success(`${result.online}/${result.total} 可达`)
+  } catch (requestError) {
+    backupError.value = requestError.message
+  } finally {
+    checkingBackup.value = false
+  }
 }
 
 async function saveBackup() {
@@ -590,7 +609,15 @@ onMounted(load)
 
       <div class="settings-actions">
         <n-button type="primary" :loading="savingBackup" @click="saveBackup">保存备用节点</n-button>
+        <n-button
+          data-testid="backup-check"
+          :disabled="!backupCount"
+          :loading="checkingBackup"
+          @click="checkBackup"
+        >测试可用性</n-button>
       </div>
+      <p v-if="backupCheck">{{ backupCheck.online }}/{{ backupCheck.total }} 可达<template v-if="backupCheck.skipped">，跳过 {{ backupCheck.skipped }} 个 UDP</template></p>
+      <p v-if="backupOffline.length">不可达：{{ backupOffline.join('、') }}</p>
       <p v-if="backupError" class="form-error credential-error" role="alert">
         {{ backupError }}
       </p>

@@ -357,3 +357,33 @@ def test_save_while_already_failing_activates(client):
         json={"nodes": BACKUP},
     )
     assert b"trojan://bak@" in client.get(f"/raw/{token}").content
+
+
+def test_backup_nodes_check_requires_config(client):
+    csrf = login(client)
+    result = client.post("/api/admin/backup-nodes/check", headers={"X-CSRF-Token": csrf})
+    assert result.status_code == 400
+
+
+def test_backup_nodes_check_probes_without_writing_health(client, monkeypatch):
+    csrf = login(client)
+    services = client.app.state.services
+    services.backup_nodes.save(BACKUP)
+
+    async def fake_probe(proxies, timeout_seconds=None):
+        assert timeout_seconds == services.runtime_settings.get().health_timeout_seconds
+        assert len(proxies) == 2
+        return [
+            {"name": "bak", "ok": True, "latency_ms": 12.0, "skipped": False},
+            {"name": "ss", "ok": False, "latency_ms": None, "skipped": False},
+        ]
+
+    monkeypatch.setattr(services.integration.health_checker, "probe_proxies", fake_probe)
+    result = client.post("/api/admin/backup-nodes/check", headers={"X-CSRF-Token": csrf})
+    assert result.status_code == 200
+    body = result.json()
+    assert body["total"] == 2
+    assert body["online"] == 1
+    assert body["skipped"] == 0
+    assert body["nodes"][1]["name"] == "ss"
+    assert services.db.list_node_health() == []

@@ -153,33 +153,24 @@ class NodeHealthChecker:
         logger.info("node health from openclash total=%d online=%d", len(records), online)
         return HealthSummary(len(records), online, checked_at)
 
-    async def run_once(self, timeout_seconds: float | None = None) -> HealthSummary:
-        async with self._run_lock:
-            return await self._run_once_locked(timeout_seconds)
-
-    async def _run_once_locked(self, timeout_seconds: float | None = None) -> HealthSummary:
-        proxies = self._load_proxies()
-        if proxies is None:
-            return HealthSummary(0, 0, None)
-
+    async def probe_proxies(self, proxies: list, timeout_seconds: float | None = None) -> list[dict]:
         semaphore = asyncio.Semaphore(self.max_concurrency)
-        checked_at = time.time()
         timeout = self.timeout_seconds if timeout_seconds is None else timeout_seconds
         resolution_cache: dict[str, tuple[str, ...]] = {}
 
-        async def check_one(proxy) -> tuple[str, int, float | None, float] | None:
+        async def check_one(proxy) -> dict | None:
             if not isinstance(proxy, dict):
                 return None
             name = str(proxy.get("name", "")).strip()
             if not name:
                 return None
             if str(proxy.get("type", "")).strip().lower() in UDP_PROTOCOLS:
-                return None
+                return {"name": name, "ok": False, "latency_ms": None, "skipped": True}
             try:
                 server = str(proxy["server"]).strip()
                 port = int(proxy["port"])
             except (KeyError, TypeError, ValueError):
-                return (name, 0, None, checked_at)
+                return {"name": name, "ok": False, "latency_ms": None, "skipped": False}
             use_tls = _needs_tls(proxy)
             sni = _sni(proxy)
             async with semaphore:
@@ -192,17 +183,32 @@ class NodeHealthChecker:
                         resolution_cache[server] = ()
                 addresses = resolution_cache[server]
                 if not addresses:
-                    return (name, 0, None, checked_at)
+                    return {"name": name, "ok": False, "latency_ms": None, "skipped": False}
                 for address in addresses:
                     try:
                         latency = await _probe_address(address, port, use_tls, sni, timeout)
-                        return (name, 1, latency, checked_at)
+                        return {"name": name, "ok": True, "latency_ms": latency, "skipped": False}
                     except (OSError, asyncio.TimeoutError, ssl.SSLError):
                         continue
-            return (name, 0, None, checked_at)
+            return {"name": name, "ok": False, "latency_ms": None, "skipped": False}
 
         results = await asyncio.gather(*(check_one(proxy) for proxy in proxies))
-        records = [result for result in results if result is not None]
+        return [result for result in results if result is not None]
+
+    async def run_once(self, timeout_seconds: float | None = None) -> HealthSummary:
+        async with self._run_lock:
+            return await self._run_once_locked(timeout_seconds)
+
+    async def _run_once_locked(self, timeout_seconds: float | None = None) -> HealthSummary:
+        proxies = self._load_proxies()
+        if proxies is None:
+            return HealthSummary(0, 0, None)
+        checked_at = time.time()
+        records = [
+            (row["name"], 1 if row["ok"] else 0, row["latency_ms"], checked_at)
+            for row in await self.probe_proxies(proxies, timeout_seconds)
+            if not row["skipped"]
+        ]
         self.db.replace_node_health(records)
         online = sum(1 for _, ok, _, _ in records if ok)
         logger.info("node health checked total=%d online=%d", len(records), online)

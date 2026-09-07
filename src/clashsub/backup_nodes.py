@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from urllib.parse import unquote, urlparse
+
+import yaml
+
 from .cache_files import CacheFiles, RawSnapshot
 from .db import Database
 from .secret_store import SecretStore, SecretStoreUnavailable
@@ -33,6 +37,32 @@ def parse_backup_nodes(text: str, max_bytes: int = 8 * 1024 * 1024) -> Validated
     return validate_subscription(text.encode("utf-8"), max_bytes)
 
 
+def backup_proxies(payload: bytes) -> list[dict]:
+    text = payload.decode("utf-8")
+    try:
+        document = yaml.safe_load(text)
+    except yaml.YAMLError:
+        document = None
+    if isinstance(document, dict) and isinstance(document.get("proxies"), list):
+        return [proxy for proxy in document["proxies"] if isinstance(proxy, dict)]
+    proxies = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parsed = urlparse(line)
+        host, port = parsed.hostname, parsed.port
+        if not host or not port:
+            continue
+        proxies.append({
+            "name": unquote(parsed.fragment) if parsed.fragment else host,
+            "type": parsed.scheme,
+            "server": host,
+            "port": port,
+        })
+    return proxies
+
+
 class BackupNodes:
     def __init__(
         self,
@@ -61,6 +91,12 @@ class BackupNodes:
             return parse_backup_nodes(raw, self.max_bytes)
         except InvalidSubscription:
             return None
+
+    def proxies(self) -> list[dict]:
+        parsed = self.load()
+        if parsed is None:
+            return []
+        return backup_proxies(parsed.payload)
 
     def is_active(self, state=None) -> bool:
         state = self.db.runtime_state() if state is None else state

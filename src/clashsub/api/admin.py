@@ -251,6 +251,24 @@ async def update_backup_nodes(payload: BackupNodesRequest, request: Request):
     return result
 
 
+@router.post("/backup-nodes/check")
+async def check_backup_nodes(request: Request):
+    require_admin(request, require_csrf=True)
+    services = _services(request)
+    proxies = services.backup_nodes.proxies()
+    if not proxies:
+        raise HTTPException(400, "未配置备用节点")
+    timeout = services.runtime_settings.get().health_timeout_seconds
+    rows = await services.integration.health_checker.probe_proxies(proxies, timeout)
+    checked = [row for row in rows if not row["skipped"]]
+    return {
+        "total": len(checked),
+        "online": sum(1 for row in checked if row["ok"]),
+        "skipped": sum(1 for row in rows if row["skipped"]),
+        "nodes": rows,
+    }
+
+
 @router.get("/settings")
 def get_settings(request: Request):
     require_admin(request)

@@ -437,4 +437,34 @@ describe('Settings', () => {
     expect(wrapper.vm.backupCount).toBe(2000)
     expect(wrapper.vm.backupTextHidden).toBe(true)
   })
+
+  it('checks backup node availability', async () => {
+    api.request
+      .mockResolvedValueOnce(loadedSettings)
+      .mockResolvedValueOnce(loadedUpstreamStatus)
+      .mockResolvedValueOnce(loadedAirportCredentials)
+      .mockResolvedValueOnce({ configured: false })
+      .mockResolvedValueOnce({
+        configured: true,
+        node_count: 2,
+        nodes: 'trojan://bak@node.example:443#bak',
+        management_available: true,
+      })
+    const wrapper = mountSettings()
+    await flushPromises()
+    api.request.mockResolvedValueOnce({
+      total: 2,
+      online: 1,
+      skipped: 0,
+      nodes: [
+        { name: 'bak', ok: true, latency_ms: 10, skipped: false },
+        { name: 'dead', ok: false, latency_ms: null, skipped: false },
+      ],
+    })
+    await buttonWithText(wrapper, '测试可用性').trigger('click')
+    await flushPromises()
+    expect(api.request).toHaveBeenCalledWith('/api/admin/backup-nodes/check', { method: 'POST' })
+    expect(wrapper.text()).toContain('1/2 可达')
+    expect(wrapper.text()).toContain('不可达：dead')
+  })
 })
