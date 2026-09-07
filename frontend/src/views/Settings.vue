@@ -66,7 +66,6 @@ const credentials = reactive({
 const airportCredentials = reactive({ username: '', password: '' })
 const backupNodes = ref('')
 const backupError = ref('')
-const backupYamlInput = ref(null)
 const savingBackup = ref(false)
 function applyBackup(payload) { backupNodes.value = payload.nodes || '' }
 
@@ -546,10 +545,12 @@ onMounted(load)
 
       <n-form :model="form" label-placement="top" class="settings-form-grid">
         <n-form-item label="备用节点">
-          <n-input
-            v-model:value="backupNodes"
-            type="textarea"
+          <textarea
+            v-model="backupNodes"
             data-testid="backup-nodes"
+            class="backup-nodes-textarea"
+            rows="8"
+            spellcheck="false"
           />
         </n-form-item>
         <n-form-item label="连续失败阈值">
@@ -564,14 +565,11 @@ onMounted(load)
 
       <div class="settings-actions">
         <input
-          ref="backupYamlInput"
           type="file"
           accept=".yaml,.yml,.txt"
-          hidden
           data-testid="backup-yaml-import"
           @change="importBackupYaml"
         />
-        <n-button @click="backupYamlInput?.click()">导入 YAML</n-button>
         <n-button type="primary" :loading="savingBackup" @click="saveBackup">保存备用节点</n-button>
       </div>
       <p v-if="backupError" class="form-error credential-error" role="alert">

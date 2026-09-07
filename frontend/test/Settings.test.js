@@ -424,6 +424,7 @@ describe('Settings', () => {
     const wrapper = mountSettingsWithNaive()
     await flushPromises()
     expect(wrapper.get('[data-testid="backup-yaml-import"]').element.closest('form')).toBeNull()
+    expect(wrapper.get('[data-testid="backup-nodes"]').element.tagName).toBe('TEXTAREA')
   })
 
   it('does not reset the file input until after the file is read', async () => {
