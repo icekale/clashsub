@@ -14,6 +14,13 @@ const checkingHealth = ref(false)
 const message = useMessage()
 
 const state = computed(() => {
+  if (data.value?.backup_active) {
+    return {
+      type: 'warning',
+      label: '正在使用备用节点',
+      detail: `上游连续失败 ${data.value.consecutive_failures} 次，当前提供 ${data.value.backup_node_count} 个备用节点。`,
+    }
+  }
   if (!data.value?.has_cache) {
     return {
       type: 'error',

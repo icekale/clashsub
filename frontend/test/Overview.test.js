@@ -170,6 +170,26 @@ describe('Overview', () => {
     expect(wrapper.text()).toContain('夜间 0:00–8:00 为 600 秒')
   })
 
+  it('prefers backup-node status over stale cache', async () => {
+    api.request
+      .mockResolvedValueOnce({
+        ...loadedOverview,
+        has_cache: false,
+        stale: true,
+        consecutive_failures: 3,
+        backup_active: true,
+        backup_configured: true,
+        backup_node_count: 2,
+      })
+      .mockResolvedValueOnce({ enabled: false, nodes: [] })
+    const wrapper = mount(Overview, { global: { stubs: viewStubs } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('正在使用备用节点')
+    expect(wrapper.text()).toContain('2')
+    expect(wrapper.text()).not.toContain('缓存陈旧但仍可用')
+    expect(wrapper.text()).not.toContain('无可用缓存')
+  })
+
   it('warns when health checking is disabled', async () => {
     api.request
       .mockResolvedValueOnce(loadedOverview)
