@@ -68,6 +68,16 @@ class BackupNodes:
             return None
         return RawSnapshot(parsed.payload, {})
 
+    def served_snapshot(self) -> RawSnapshot:
+        if self.is_active():
+            snap = self.snapshot()
+            if snap is not None:
+                return snap
+        digest = self.db.runtime_state()["current_digest"]
+        if not digest:
+            raise FileNotFoundError("subscription cache unavailable")
+        return self.cache.read_raw(digest)
+
     def status(self) -> dict:
         available = self.store.available
         nodes = ""

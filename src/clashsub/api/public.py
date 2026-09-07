@@ -92,13 +92,11 @@ async def _refresh_state(services):
     return services.db.runtime_state()
 
 
-def _read_raw(services, digest):
-    if not digest:
-        raise HTTPException(503, "subscription cache unavailable")
+def _served_snapshot(services):
     try:
-        return services.cache.read_raw(digest)
-    except OSError:
-        logger.warning("raw cache unreadable digest=%s", digest)
+        return services.backup_nodes.served_snapshot()
+    except (FileNotFoundError, OSError):
+        logger.warning("raw cache unreadable")
         raise HTTPException(503, "subscription cache unavailable") from None
 
 
@@ -107,8 +105,8 @@ async def _raw_response(request: Request, token: str, require_clash: bool = Fals
     share = services.shares.resolve(token, require_clash=require_clash)
     if not share:
         raise HTTPException(404)
-    state = await _refresh_state(services)
-    snapshot = _read_raw(services, state["current_digest"] if state else None)
+    await _refresh_state(services)
+    snapshot = _served_snapshot(services)
     headers = {
         **_cache_headers(snapshot, services.runtime_settings.get().refresh_interval_minutes),
         "Cache-Control": "no-store",
@@ -135,8 +133,10 @@ async def ha_subscription(token: str, request: Request):
     if not share:
         raise HTTPException(404)
     settings = services.runtime_settings.get()
-    state = await _refresh_state(services)
-    snapshot = _read_raw(services, state["current_digest"] if state else None)
+    await _refresh_state(services)
+    if services.backup_nodes.is_active():
+        return await clash_subscription(token, request)
+    snapshot = _served_snapshot(services)
     try:
         document = await asyncio.to_thread(yaml.safe_load, snapshot.payload)
     except (yaml.YAMLError, RecursionError, AttributeError):
@@ -188,7 +188,24 @@ async def _converted_subscription(token: str, request: Request, format: str):
         ("http://", "https://")
     ):
         raise HTTPException(404)
-    source_digest = state["current_digest"] if state else None
+    headers = {"Cache-Control": "no-store"}
+    if services.backup_nodes.is_active():
+        headers["profile-update-interval"] = _profile_update_interval_hours(
+            settings.refresh_interval_minutes
+        )
+        source_digest = None
+    else:
+        source_digest = state["current_digest"] if state else None
+        if source_digest:
+            try:
+                headers.update(
+                    _cache_headers(
+                        services.cache.read_raw(source_digest),
+                        settings.refresh_interval_minutes,
+                    )
+                )
+            except OSError:
+                pass
     try:
         body = await services.converter.render(
             share["id"],
@@ -201,17 +218,6 @@ async def _converted_subscription(token: str, request: Request, format: str):
         logger.warning("converter unavailable format=%s", format)
         raise HTTPException(503, "converter unavailable") from exc
     media_type = "text/yaml; charset=utf-8" if format == "clash" else "text/plain; charset=utf-8"
-    headers = {"Cache-Control": "no-store"}
-    if source_digest:
-        try:
-            headers.update(
-                _cache_headers(
-                    services.cache.read_raw(source_digest),
-                    settings.refresh_interval_minutes,
-                )
-            )
-        except OSError:
-            pass
     return Response(body, media_type=media_type, headers=headers)
 
 

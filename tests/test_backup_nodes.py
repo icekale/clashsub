@@ -1,12 +1,17 @@
+import base64
+from dataclasses import replace
+
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from clashsub.app import create_app
 from clashsub.backup_nodes import BackupNodes, parse_backup_nodes
 from clashsub.cache_files import CacheFiles
 from clashsub.db import Database
 from clashsub.secret_store import SecretStore
-from clashsub.settings import SettingsStore
+from clashsub.settings import RuntimeSettings, SettingsStore
 from clashsub.sources import ResolvedSubscription
 from clashsub.subscription import InvalidSubscription, UpstreamRefresher
 
@@ -187,3 +192,84 @@ async def test_success_clears_converted_when_leaving_backup(tmp_path):
     assert nodes.is_active() is False
     assert db.runtime_state()["current_digest"] == digest
     assert not stale.exists()
+
+
+@pytest.fixture
+def client(app_settings, tmp_path):
+    key = tmp_path / "backup-key"
+    key.write_bytes(base64.b64encode(b"k" * 32))
+    settings = replace(app_settings, encryption_key_file=key)
+    with TestClient(
+        create_app(settings, start_scheduler=False),
+        client=("127.0.0.1", 50000),
+    ) as value:
+        value.app.state.services.runtime_settings.update(
+            RuntimeSettings(lan_base_url="http://testserver")
+        )
+        yield value
+
+
+def _token(client):
+    created = client.app.state.services.shares.create("local-test")
+    return created.raw_url.rsplit("/", 1)[1]
+
+
+def _seed_airport(services, payload=b"trojan://air@node.example:443#air\n"):
+    digest = services.cache.publish_raw(
+        payload, {"subscription-userinfo": "upload=1"}
+    )
+    services.db.record_refresh_success(
+        digest, 1, "uri-list", {"subscription-userinfo": "upload=1"}, 100, "fallback"
+    )
+    return digest
+
+
+def test_raw_stays_on_airport_before_threshold(client):
+    services = client.app.state.services
+    token = _token(client)
+    digest = _seed_airport(services)
+    services.backup_nodes.save(BACKUP)
+    services.db.record_refresh_failure("all_sources_failed", 200)
+    response = client.get(f"/raw/{token}")
+    assert response.content.startswith(b"trojan://air@")
+    assert response.headers["subscription-userinfo"] == "upload=1"
+    assert services.db.runtime_state()["current_digest"] == digest
+
+
+def test_raw_serves_backup_at_threshold_and_keeps_digest(client):
+    services = client.app.state.services
+    token = _token(client)
+    digest = _seed_airport(services)
+    services.backup_nodes.save(BACKUP)
+    for i in range(3):
+        services.db.record_refresh_failure("all_sources_failed", 200 + i)
+    response = client.get(f"/raw/{token}")
+    assert b"trojan://bak@" in response.content
+    assert "subscription-userinfo" not in response.headers
+    assert response.headers["profile-update-interval"]
+    assert services.db.runtime_state()["current_digest"] == digest
+
+
+def test_raw_returns_to_airport_after_success(client):
+    services = client.app.state.services
+    token = _token(client)
+    digest = _seed_airport(services)
+    services.backup_nodes.save(BACKUP)
+    for i in range(3):
+        services.db.record_refresh_failure("all_sources_failed", 200 + i)
+    assert b"trojan://bak@" in client.get(f"/raw/{token}").content
+    services.db.record_refresh_success(
+        digest, 1, "uri-list", {"subscription-userinfo": "upload=1"}, 300, "fallback"
+    )
+    response = client.get(f"/raw/{token}")
+    assert response.content.startswith(b"trojan://air@")
+    assert services.db.runtime_state()["current_digest"] == digest
+
+
+def test_invalid_or_empty_backup_never_activates(client):
+    services = client.app.state.services
+    token = _token(client)
+    _seed_airport(services)
+    for i in range(3):
+        services.db.record_refresh_failure("all_sources_failed", 200 + i)
+    assert client.get(f"/raw/{token}").content.startswith(b"trojan://air@")
