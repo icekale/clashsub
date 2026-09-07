@@ -53,6 +53,7 @@ const SETTINGS_DEFAULTS = {
   health_night_interval_seconds: 600,
   health_night_start_hour: 0,
   health_night_end_hour: 8,
+  backup_fail_threshold: 3,
 }
 const form = reactive({ ...SETTINGS_DEFAULTS })
 const original = reactive({ ...form })
@@ -63,6 +64,10 @@ const credentials = reactive({
   confirmation: '',
 })
 const airportCredentials = reactive({ username: '', password: '' })
+const backupNodes = ref('')
+const backupError = ref('')
+const savingBackup = ref(false)
+function applyBackup(payload) { backupNodes.value = payload.nodes || '' }
 
 const baseUrlChanged = computed(
   () => form.lan_base_url !== original.lan_base_url
@@ -88,11 +93,12 @@ function applySettings(payload) {
 async function load() {
   loading.value = true
   try {
-    const [settingsPayload, statusPayload, airportPayload, openclashPayload] = await Promise.all([
+    const [settingsPayload, statusPayload, airportPayload, openclashPayload, backupPayload] = await Promise.all([
       api.request('/api/admin/settings'),
       api.request('/api/admin/upstream/status'),
       api.request('/api/admin/upstream/credentials'),
       api.request('/api/admin/openclash/credentials'),
+      api.request('/api/admin/backup-nodes'),
     ])
     applySettings(settingsPayload)
     upstreamStatus.value = statusPayload
@@ -102,6 +108,7 @@ async function load() {
     }
     openclashSecretConfigured.value = Boolean(openclashPayload?.configured)
     openclashSecret.value = ''
+    applyBackup(backupPayload)
     loaded.value = true
     error.value = ''
   } catch (requestError) {
@@ -266,6 +273,22 @@ async function saveSettings() {
     publicAcknowledged.value = false
   } finally {
     saving.value = false
+  }
+}
+
+async function saveBackup() {
+  backupError.value = ''
+  savingBackup.value = true
+  try {
+    await api.request('/api/admin/backup-nodes', {
+      method: 'PUT',
+      body: { nodes: backupNodes.value },
+    })
+    await saveSettings()
+  } catch (requestError) {
+    backupError.value = requestError.message
+  } finally {
+    savingBackup.value = false
   }
 }
 
@@ -497,6 +520,40 @@ onMounted(load)
       </n-form>
       <p v-if="airportCredentialError" class="form-error credential-error" role="alert">
         {{ airportCredentialError }}
+      </p>
+    </section>
+
+    <section class="operation-panel" aria-labelledby="backup-nodes-heading">
+      <div class="panel-heading">
+        <div>
+          <h2 id="backup-nodes-heading">备用节点</h2>
+          <p>连续失败达到阈值后全部分享出口只提供这些节点，机场缓存保留。</p>
+        </div>
+      </div>
+
+      <n-form :model="form" label-placement="top" class="settings-form-grid">
+        <n-form-item label="备用节点">
+          <n-input
+            v-model:value="backupNodes"
+            type="textarea"
+            data-testid="backup-nodes"
+          />
+        </n-form-item>
+        <n-form-item label="连续失败阈值">
+          <n-input-number
+            v-model:value="form.backup_fail_threshold"
+            data-testid="backup-fail-threshold"
+            :min="1"
+            :max="20"
+          />
+        </n-form-item>
+      </n-form>
+
+      <div class="settings-actions">
+        <n-button type="primary" :loading="savingBackup" @click="saveBackup">保存备用节点</n-button>
+      </div>
+      <p v-if="backupError" class="form-error credential-error" role="alert">
+        {{ backupError }}
       </p>
     </section>
 

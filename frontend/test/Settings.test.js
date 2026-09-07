@@ -58,6 +58,7 @@ const loadedSettings = {
   health_night_interval_seconds: 600,
   health_night_start_hour: 0,
   health_night_end_hour: 8,
+  backup_fail_threshold: 3,
 }
 
 const loadedUpstreamStatus = {
@@ -79,6 +80,7 @@ function mockInitialLoad(status = loadedUpstreamStatus) {
     .mockResolvedValueOnce(status)
     .mockResolvedValueOnce(loadedAirportCredentials)
     .mockResolvedValueOnce({ configured: false })
+    .mockResolvedValueOnce({ configured: false, node_count: 0, nodes: '', management_available: true })
 }
 
 function mountSettings() {
@@ -142,7 +144,7 @@ describe('Settings', () => {
     await buttonWithText(wrapper, '保存运行设置').trigger('click')
     await flushPromises()
 
-    expect(api.request).toHaveBeenNthCalledWith(5, '/api/admin/settings', {
+    expect(api.request).toHaveBeenNthCalledWith(6, '/api/admin/settings', {
       method: 'PUT',
       body: {
         ...loadedSettings,
@@ -190,13 +192,13 @@ describe('Settings', () => {
     await confirmation.setValue('does-not-match')
     await wrapper.get('.credentials-form-grid').trigger('submit')
     expect(wrapper.text()).toContain('两次输入的新密码不一致')
-    expect(api.request).toHaveBeenCalledTimes(4)
+    expect(api.request).toHaveBeenCalledTimes(5)
 
     await confirmation.setValue('next-secret')
     await wrapper.get('.credentials-form-grid').trigger('submit')
     await flushPromises()
 
-    expect(api.request).toHaveBeenNthCalledWith(5, '/api/auth/credentials', {
+    expect(api.request).toHaveBeenNthCalledWith(6, '/api/auth/credentials', {
       method: 'PUT',
       body: {
         current_password: 'current-secret',
@@ -250,7 +252,7 @@ describe('Settings', () => {
     const wrapper = mountSettingsWithNaive()
     await flushPromises()
 
-    expect(wrapper.findAll('form')).toHaveLength(5)
+    expect(wrapper.findAll('form')).toHaveLength(6)
     await wrapper.get('#admin-current-password').setValue('current-secret')
     await wrapper.get('#admin-new-username').setValue('next-admin')
     await wrapper.get('#admin-new-password').setValue('next-secret')
@@ -258,7 +260,7 @@ describe('Settings', () => {
     await wrapper.get('form.credentials-form-grid').trigger('submit')
     await flushPromises()
 
-    expect(api.request).toHaveBeenNthCalledWith(5, '/api/auth/credentials', {
+    expect(api.request).toHaveBeenNthCalledWith(6, '/api/auth/credentials', {
       method: 'PUT',
       body: {
         current_password: 'current-secret',
@@ -286,6 +288,7 @@ describe('Settings', () => {
       .mockResolvedValueOnce(statusWithUnexpectedSecrets)
       .mockResolvedValueOnce(loadedAirportCredentials)
       .mockResolvedValueOnce({ configured: false })
+      .mockResolvedValueOnce({ configured: false, node_count: 0, nodes: '', management_available: true })
       .mockResolvedValueOnce({ ok: true, error_category: null, expires_at: 1_900_000_000 })
 
     const wrapper = mountSettings()
@@ -299,6 +302,7 @@ describe('Settings', () => {
       ['/api/admin/upstream/status'],
       ['/api/admin/upstream/credentials'],
       ['/api/admin/openclash/credentials'],
+      ['/api/admin/backup-nodes'],
     ])
     expect(wrapper.text()).toContain('机场订阅源')
     expect(wrapper.text()).toContain('https://panel.example.test/api/v1')
@@ -350,7 +354,7 @@ describe('Settings', () => {
     const testButton = buttonWithText(wrapper, '测试机场连接')
     expect(wrapper.text()).toContain('协议配置不完整')
     expect(testButton.attributes('disabled')).toBeDefined()
-    expect(api.request).toHaveBeenCalledTimes(4)
+    expect(api.request).toHaveBeenCalledTimes(5)
   })
 
   it('loads airport credentials without prefilling the password and saves a validated candidate', async () => {
@@ -359,6 +363,7 @@ describe('Settings', () => {
       .mockResolvedValueOnce(loadedUpstreamStatus)
       .mockResolvedValueOnce({ username: 'member@example.test', password_configured: true })
       .mockResolvedValueOnce({ configured: false })
+      .mockResolvedValueOnce({ configured: false, node_count: 0, nodes: '', management_available: true })
       .mockResolvedValueOnce({ ok: true, node_count: 49, error_category: null })
     const wrapper = mountSettingsWithNaive()
     await flushPromises()
@@ -370,11 +375,32 @@ describe('Settings', () => {
     await wrapper.get('form.airport-credentials-form').trigger('submit')
     await flushPromises()
 
-    expect(api.request).toHaveBeenNthCalledWith(5, '/api/admin/upstream/credentials', {
+    expect(api.request).toHaveBeenNthCalledWith(6, '/api/admin/upstream/credentials', {
       method: 'PUT',
       body: { username: 'updated@example.test', password: 'candidate-password' },
     })
     expect(wrapper.get('#airport-password').element.value).toBe('')
     expect(wrapper.text()).toContain('49')
+  })
+
+  it('saves backup nodes and threshold from the backup card', async () => {
+    mockInitialLoad()
+    api.request
+      .mockResolvedValueOnce({ configured: true, node_count: 1, nodes: 'trojan://bak@node.example:443#bak', management_available: true })
+      .mockResolvedValueOnce({ ...loadedSettings, backup_fail_threshold: 4 })
+    const wrapper = mountSettings()
+    await flushPromises()
+    await wrapper.get('[data-testid="backup-nodes"]').setValue('trojan://bak@node.example:443#bak')
+    await wrapper.get('[data-testid="backup-fail-threshold"]').setValue(4)
+    await buttonWithText(wrapper, '保存备用节点').trigger('click')
+    await flushPromises()
+    expect(api.request).toHaveBeenCalledWith('/api/admin/backup-nodes', {
+      method: 'PUT',
+      body: { nodes: 'trojan://bak@node.example:443#bak' },
+    })
+    expect(api.request).toHaveBeenCalledWith('/api/admin/settings', expect.objectContaining({
+      method: 'PUT',
+      body: expect.objectContaining({ backup_fail_threshold: 4 }),
+    }))
   })
 })
