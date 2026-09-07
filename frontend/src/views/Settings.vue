@@ -64,10 +64,20 @@ const credentials = reactive({
   confirmation: '',
 })
 const airportCredentials = reactive({ username: '', password: '' })
+const BACKUP_TEXTAREA_LIMIT = 16384
 const backupNodes = ref('')
 const backupError = ref('')
+const backupCount = ref(0)
+const backupTextHidden = ref(false)
 const savingBackup = ref(false)
-function applyBackup(payload) { backupNodes.value = payload.nodes || '' }
+const embedded = window.self !== window.top
+const settingsHref = window.location.href
+function applyBackup(payload) {
+  const nodes = payload.nodes || ''
+  backupCount.value = payload.node_count || 0
+  backupTextHidden.value = nodes.length > BACKUP_TEXTAREA_LIMIT
+  backupNodes.value = backupTextHidden.value ? '' : nodes
+}
 
 const baseUrlChanged = computed(
   () => form.lan_base_url !== original.lan_base_url
@@ -276,26 +286,51 @@ async function saveSettings() {
   }
 }
 
+function pickBackupYaml() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.yaml,.yml,.txt'
+  input.addEventListener('change', (event) => {
+    importBackupYaml(event).finally(() => input.remove())
+  }, { once: true })
+  document.body.appendChild(input)
+  input.click()
+}
+
+function onBackupDrop(event) {
+  const file = event.dataTransfer?.files?.[0]
+  if (file) importBackupYaml({ target: { files: [file], value: '' } })
+}
+
 async function importBackupYaml(event) {
   const file = event.target.files?.[0]
   if (!file) return
+  savingBackup.value = true
+  backupError.value = ''
   try {
-    backupNodes.value = await file.text()
-    backupError.value = ''
-  } catch {
-    backupError.value = '无法读取文件'
+    const result = await api.request('/api/admin/backup-nodes', {
+      method: 'PUT',
+      body: { nodes: await file.text() },
+    })
+    applyBackup(result)
+    message.success(`备用节点已保存（${result.node_count} 个）`)
+  } catch (requestError) {
+    backupError.value = requestError.message || '无法读取文件'
   }
   event.target.value = ''
+  savingBackup.value = false
 }
 
 async function saveBackup() {
   backupError.value = ''
   savingBackup.value = true
   try {
-    await api.request('/api/admin/backup-nodes', {
-      method: 'PUT',
-      body: { nodes: backupNodes.value },
-    })
+    if (!backupTextHidden.value || backupNodes.value.trim()) {
+      applyBackup(await api.request('/api/admin/backup-nodes', {
+        method: 'PUT',
+        body: { nodes: backupNodes.value },
+      }))
+    }
     await saveSettings()
   } catch (requestError) {
     backupError.value = requestError.message
@@ -540,6 +575,12 @@ onMounted(load)
         <div>
           <h2 id="backup-nodes-heading">备用节点</h2>
           <p>连续失败达到阈值后全部分享出口只提供这些节点，机场缓存保留。</p>
+          <p v-if="backupCount">已保存 {{ backupCount }} 个节点<template v-if="backupTextHidden">，内容较大未在框中展开，改节点请重新导入</template></p>
+          <p v-if="embedded" class="form-error" role="alert">
+            当前在内嵌窗口，选择文件会卡死。
+            <a :href="settingsHref" target="_blank" rel="noopener">新标签打开</a>
+            后再导入，或把 YAML 拖到输入框。
+          </p>
         </div>
       </div>
 
@@ -551,6 +592,8 @@ onMounted(load)
             class="backup-nodes-textarea"
             rows="8"
             spellcheck="false"
+            @dragover.prevent
+            @drop.prevent="onBackupDrop"
           />
         </n-form-item>
         <n-form-item label="连续失败阈值">
@@ -564,12 +607,12 @@ onMounted(load)
       </n-form>
 
       <div class="settings-actions">
-        <input
-          type="file"
-          accept=".yaml,.yml,.txt"
+        <n-button
+          v-if="!embedded"
           data-testid="backup-yaml-import"
-          @change="importBackupYaml"
-        />
+          :loading="savingBackup"
+          @click="pickBackupYaml"
+        >导入 YAML</n-button>
         <n-button type="primary" :loading="savingBackup" @click="saveBackup">保存备用节点</n-button>
       </div>
       <p v-if="backupError" class="form-error credential-error" role="alert">
