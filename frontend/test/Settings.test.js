@@ -404,16 +404,15 @@ describe('Settings', () => {
     }))
   })
 
-  it('saves an imported yaml file as backup nodes', async () => {
+  it('saves a yaml file dropped onto the backup textarea', async () => {
     mockInitialLoad()
     const wrapper = mountSettings()
     await flushPromises()
     const yaml = '# keep\nproxies:\n  - name: bak\n    type: ss\n'
-    expect(wrapper.get('[data-testid="backup-yaml-import"]').exists()).toBe(true)
     api.request.mockResolvedValueOnce({
       configured: true, node_count: 1, nodes: yaml, management_available: true,
     })
-    await wrapper.vm.importBackupYaml({ target: { files: [{ text: async () => yaml }], value: '' } })
+    await wrapper.vm.onBackupDrop({ dataTransfer: { files: [{ text: async () => yaml }] } })
     await flushPromises()
     expect(api.request).toHaveBeenCalledWith('/api/admin/backup-nodes', {
       method: 'PUT',
@@ -422,7 +421,7 @@ describe('Settings', () => {
     expect(wrapper.vm.backupNodes).toBe(yaml)
   })
 
-  it('does not put a large yaml import into the textarea', async () => {
+  it('does not put a large yaml drop into the textarea', async () => {
     mockInitialLoad()
     const wrapper = mountSettings()
     await flushPromises()
@@ -430,42 +429,12 @@ describe('Settings', () => {
     api.request.mockResolvedValueOnce({
       configured: true, node_count: 2000, nodes: yaml, management_available: true,
     })
-    await wrapper.vm.importBackupYaml({ target: { files: [{ text: async () => yaml }], value: '' } })
+    await wrapper.vm.importBackupYaml({
+      target: { files: [{ text: async () => yaml }], value: '' },
+    })
     await flushPromises()
     expect(wrapper.vm.backupNodes).toBe('')
     expect(wrapper.vm.backupCount).toBe(2000)
     expect(wrapper.vm.backupTextHidden).toBe(true)
-  })
-
-  it('opens the yaml picker on document.body outside n-layout', async () => {
-    mockInitialLoad()
-    const wrapper = mountSettings()
-    await flushPromises()
-    wrapper.vm.pickBackupYaml()
-    const input = document.body.querySelector('input[type="file"]')
-    expect(input).not.toBeNull()
-    expect(input.closest('.n-layout')).toBeNull()
-    input.remove()
-  })
-
-  it('does not reset the file input until after the file is read', async () => {
-    mockInitialLoad()
-    const wrapper = mountSettings()
-    await flushPromises()
-    const yaml = 'proxies:\n  - name: bak\n'
-    api.request.mockResolvedValueOnce({
-      configured: true, node_count: 1, nodes: yaml, management_available: true,
-    })
-    const target = {
-      value: 'C:\\fakepath\\nodes.yaml',
-      files: [{
-        text: async () => {
-          expect(target.value).toBe('C:\\fakepath\\nodes.yaml')
-          return yaml
-        },
-      }],
-    }
-    await wrapper.vm.importBackupYaml({ target })
-    expect(target.value).toBe('')
   })
 })

@@ -70,8 +70,6 @@ const backupError = ref('')
 const backupCount = ref(0)
 const backupTextHidden = ref(false)
 const savingBackup = ref(false)
-const embedded = window.self !== window.top
-const settingsHref = window.location.href
 function applyBackup(payload) {
   const nodes = payload.nodes || ''
   backupCount.value = payload.node_count || 0
@@ -284,17 +282,6 @@ async function saveSettings() {
   } finally {
     saving.value = false
   }
-}
-
-function pickBackupYaml() {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = '.yaml,.yml,.txt'
-  input.addEventListener('change', (event) => {
-    importBackupYaml(event).finally(() => input.remove())
-  }, { once: true })
-  document.body.appendChild(input)
-  input.click()
 }
 
 function onBackupDrop(event) {
@@ -574,13 +561,8 @@ onMounted(load)
       <div class="panel-heading">
         <div>
           <h2 id="backup-nodes-heading">备用节点</h2>
-          <p>连续失败达到阈值后全部分享出口只提供这些节点，机场缓存保留。</p>
-          <p v-if="backupCount">已保存 {{ backupCount }} 个节点<template v-if="backupTextHidden">，内容较大未在框中展开，改节点请重新导入</template></p>
-          <p v-if="embedded" class="form-error" role="alert">
-            当前在内嵌窗口，选择文件会卡死。
-            <a :href="settingsHref" target="_blank" rel="noopener">新标签打开</a>
-            后再导入，或把 YAML 拖到输入框。
-          </p>
+          <p>连续失败达到阈值后全部分享出口只提供这些节点，机场缓存保留。把 YAML 或节点链接粘贴进框后点保存；也可以把 .yaml 拖进框。不要点系统「选择文件」。</p>
+          <p v-if="backupCount">已保存 {{ backupCount }} 个节点<template v-if="backupTextHidden">，内容较大未在框中展开，改节点请重新粘贴或拖入</template></p>
         </div>
       </div>
 
@@ -607,12 +589,6 @@ onMounted(load)
       </n-form>
 
       <div class="settings-actions">
-        <n-button
-          v-if="!embedded"
-          data-testid="backup-yaml-import"
-          :loading="savingBackup"
-          @click="pickBackupYaml"
-        >导入 YAML</n-button>
         <n-button type="primary" :loading="savingBackup" @click="saveBackup">保存备用节点</n-button>
       </div>
       <p v-if="backupError" class="form-error credential-error" role="alert">
