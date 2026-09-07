@@ -21,9 +21,16 @@ def normalize_nodes(text: str) -> str:
 
 def parse_backup_nodes(text: str, max_bytes: int = 8 * 1024 * 1024) -> ValidatedSubscription:
     normalized = normalize_nodes(text)
-    if not normalized:
+    if normalized:
+        try:
+            parsed = validate_subscription(normalized.encode("utf-8"), max_bytes)
+            if parsed.content_format == "uri-list":
+                return parsed
+        except InvalidSubscription:
+            pass
+    if not text.strip():
         raise InvalidSubscription("backup nodes are empty")
-    return validate_subscription(normalized.encode("utf-8"), max_bytes)
+    return validate_subscription(text.encode("utf-8"), max_bytes)
 
 
 class BackupNodes:

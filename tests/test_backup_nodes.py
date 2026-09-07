@@ -46,6 +46,36 @@ def test_parse_rejects_garbage():
         parse_backup_nodes("not-a-proxy")
 
 
+YAML = """# keep me
+proxies:
+  - name: bak
+    type: ss
+    server: node.example
+    port: 8388
+    cipher: aes-256-gcm
+    password: p
+"""
+
+
+def test_parse_yaml_keeps_comments_and_indent():
+    parsed = parse_backup_nodes(YAML)
+    assert parsed.content_format == "yaml"
+    assert parsed.node_count == 1
+    assert parsed.payload.decode("utf-8") == YAML
+
+
+def test_parse_yaml_without_proxies_rejected():
+    with pytest.raises(InvalidSubscription):
+        parse_backup_nodes("proxies: []\n")
+
+
+def test_save_yaml_roundtrip(tmp_path):
+    _, nodes = _nodes(tmp_path)
+    nodes.save(YAML)
+    assert nodes.status()["nodes"] == YAML
+    assert nodes.status()["node_count"] == 1
+
+
 def test_inactive_below_threshold(tmp_path):
     db, nodes = _nodes(tmp_path)
     nodes.save(BACKUP)
