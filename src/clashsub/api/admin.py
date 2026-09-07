@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from ..events import read_recent_events
 from ..events import get_logger
 from ..integration import OPENCLASH_SECRET_NAME
-from ..subscription import parse_subscription_userinfo
+from ..subscription import InvalidSubscription, parse_subscription_userinfo
 from ..openclash_client import OpenClashClient, OpenClashError
 from ..secret_store import SecretStoreUnavailable
 from ..settings import RuntimeSettings, validate_http_origin
@@ -54,6 +54,7 @@ class RuntimeSettingsRequest(BaseModel):
     health_night_interval_seconds: int = Field(default=600, ge=30, le=86400)
     health_night_start_hour: int = Field(default=0, ge=0, le=23)
     health_night_end_hour: int = Field(default=8, ge=0, le=23)
+    backup_fail_threshold: int = Field(default=3, ge=1, le=20)
     public_acknowledged: bool = False
 
 
@@ -73,6 +74,10 @@ class UpstreamCredentialsRequest(BaseModel):
 
 class RevealShareRequest(BaseModel):
     kind: Literal["raw", "clash", "clash-ha", "surge", "loon", "smart"]
+
+
+class BackupNodesRequest(BaseModel):
+    nodes: str = Field(default="", max_length=512_000)
 
 
 def _services(request: Request):
@@ -103,6 +108,8 @@ def overview(request: Request):
     services = _services(request)
     state = services.db.runtime_state()
     converter_enabled = services.runtime_settings.get().converter_enabled
+    backup = services.backup_nodes
+    backup_status = backup.status()
     return {
         "has_cache": state["current_digest"] is not None,
         "stale": state["consecutive_failures"] > 0,
@@ -121,6 +128,9 @@ def overview(request: Request):
         "subscription_usage": parse_subscription_userinfo(
             json.loads(state["safe_headers_json"] or "{}").get("subscription-userinfo")
         ),
+        "backup_active": backup.is_active(state),
+        "backup_configured": backup_status["configured"],
+        "backup_node_count": backup_status["node_count"],
     }
 
 
@@ -213,6 +223,32 @@ def delete_share(share_id: str, request: Request):
     services.cache.remove_converted(share_id)
     logger.info("share deleted id=%s", share_id)
     return Response(status_code=204)
+
+
+@router.get("/backup-nodes")
+def get_backup_nodes(request: Request):
+    require_admin(request)
+    return _services(request).backup_nodes.status()
+
+
+@router.put("/backup-nodes")
+async def update_backup_nodes(payload: BackupNodesRequest, request: Request):
+    require_admin(request, require_csrf=True)
+    services = _services(request)
+    try:
+        result = services.backup_nodes.save(payload.nodes)
+    except InvalidSubscription as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except SecretStoreUnavailable as exc:
+        raise HTTPException(503, "encrypted secret store unavailable") from exc
+    should_notify = result.pop("should_notify", False)
+    logger.info("backup nodes updated configured=%s count=%d", result["configured"], result["node_count"])
+    if should_notify:
+        try:
+            await services.integration.sync_after_refresh()
+        except Exception:
+            logger.exception("backup-nodes OpenClash push failed")
+    return result
 
 
 @router.get("/settings")

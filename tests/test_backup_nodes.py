@@ -209,6 +209,15 @@ def client(app_settings, tmp_path):
         yield value
 
 
+def login(client):
+    response = client.post(
+        "/api/auth/login",
+        json={"username": "initial-user", "password": "initial-password"},
+    )
+    assert response.status_code == 200
+    return response.json()["csrf_token"]
+
+
 def _token(client):
     created = client.app.state.services.shares.create("local-test")
     return created.raw_url.rsplit("/", 1)[1]
@@ -273,3 +282,48 @@ def test_invalid_or_empty_backup_never_activates(client):
     for i in range(3):
         services.db.record_refresh_failure("all_sources_failed", 200 + i)
     assert client.get(f"/raw/{token}").content.startswith(b"trojan://air@")
+
+
+def test_backup_nodes_api_round_trip_and_overview(client):
+    csrf = login(client)
+    services = client.app.state.services
+    headers = {"X-CSRF-Token": csrf}
+    empty = client.get("/api/admin/backup-nodes")
+    assert empty.status_code == 200
+    assert empty.json()["configured"] is False
+    bad = client.put("/api/admin/backup-nodes", headers=headers, json={"nodes": "nope"})
+    assert bad.status_code == 400
+    saved = client.put("/api/admin/backup-nodes", headers=headers, json={"nodes": BACKUP})
+    assert saved.status_code == 200
+    assert saved.json()["node_count"] == 2
+    assert "trojan://bak@" in client.get("/api/admin/backup-nodes").json()["nodes"]
+    overview = client.get("/api/admin/overview").json()
+    assert overview["backup_configured"] is True
+    assert overview["backup_active"] is False
+    assert "trojan://" not in str(overview)
+    for i in range(3):
+        services.db.record_refresh_failure("all_sources_failed", i)
+    assert client.get("/api/admin/overview").json()["backup_active"] is True
+    current = client.get("/api/admin/settings").json()
+    assert current["backup_fail_threshold"] == 3
+    updated = client.put("/api/admin/settings", headers=headers, json={**current, "backup_fail_threshold": 5})
+    assert updated.status_code == 200
+    assert updated.json()["backup_fail_threshold"] == 5
+    cleared = client.put("/api/admin/backup-nodes", headers=headers, json={"nodes": ""})
+    assert cleared.status_code == 200
+    assert client.get("/api/admin/overview").json()["backup_active"] is False
+
+
+def test_save_while_already_failing_activates(client):
+    csrf = login(client)
+    services = client.app.state.services
+    token = _token(client)
+    _seed_airport(services)
+    for i in range(3):
+        services.db.record_refresh_failure("all_sources_failed", i)
+    client.put(
+        "/api/admin/backup-nodes",
+        headers={"X-CSRF-Token": csrf},
+        json={"nodes": BACKUP},
+    )
+    assert b"trojan://bak@" in client.get(f"/raw/{token}").content
