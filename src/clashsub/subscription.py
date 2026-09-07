@@ -173,22 +173,32 @@ class UpstreamRefresher:
         allowed_download_cidrs: Sequence[str] = (),
         credential_store: SecretStore | None = None,
         on_refreshed: Callable[[], Awaitable[None]] | None = None,
+        backup=None,
     ):
         self.db, self.cache, self.sources = db, cache, sources
         self.transport, self.max_bytes = transport, max_bytes
         self.resolver = resolver or _resolve_host
         self.credential_store = credential_store
         self.on_refreshed = on_refreshed
+        self.backup = backup
         self.allowed_download_networks = tuple(
             ipaddress.ip_network(value) for value in allowed_download_cidrs
         )
         self._lock = asyncio.Lock()
         self._refreshing = False
 
+    def _backup_active(self, state=None) -> bool:
+        return bool(self.backup and self.backup.is_active(state))
+
     async def refresh(self) -> RefreshResult:
         async with self._lock:
+            was = self._backup_active()
             result = await self._refresh_locked(time.time())
-        if result.updated:
+            now = self._backup_active()
+            if was != now:
+                self.cache.clear_converted()
+            entered = (not was) and now
+        if result.updated or entered:
             await self._notify_refreshed()
         return result
 
@@ -204,8 +214,13 @@ class UpstreamRefresher:
             state = self.db.runtime_state()
             if not self._is_stale(state, max_age_seconds):
                 return None
+            was = self._backup_active()
             result = await self._refresh_locked(time.time())
-        if result is not None and result.updated:
+            now = self._backup_active()
+            if was != now:
+                self.cache.clear_converted()
+            entered = (not was) and now
+        if result.updated or entered:
             await self._notify_refreshed()
         return result
 

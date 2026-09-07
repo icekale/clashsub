@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from .access import AccessPolicy, SlidingWindowLimiter
 from .api import admin, auth as auth_api, public
 from .auth import AuthService
+from .backup_nodes import BackupNodes
 from .cache_files import CacheFiles
 from .config import Settings
 from .converter import ConverterService
@@ -41,6 +42,7 @@ class Services:
     refresher: UpstreamRefresher
     credential_store: SecretStore
     integration: IntegrationService
+    backup_nodes: BackupNodes
     transport: object | None = None
     scheduler: object | None = None
     health_scheduler: object | None = None
@@ -66,6 +68,7 @@ def build_services(config: Settings, transport=None, resolver=None) -> Services:
             "encrypted secret store unavailable: share recovery and stored credentials "
             "will not work (check ENCRYPTION_KEY_SECRET_FILE)"
         )
+    backup_nodes = BackupNodes(db, cache, credential_store, runtime, config.max_response_bytes)
     auth = AuthService(db)
     auth.bootstrap(
         config.initial_username.get_secret_value(),
@@ -135,6 +138,7 @@ def build_services(config: Settings, transport=None, resolver=None) -> Services:
         allowed_download_cidrs=config.download_allowed_cidrs,
         credential_store=credential_store,
         on_refreshed=integration.sync_after_refresh,
+        backup=backup_nodes,
     )
     integration.refresher = refresher
     return Services(
@@ -151,6 +155,7 @@ def build_services(config: Settings, transport=None, resolver=None) -> Services:
         refresher=refresher,
         credential_store=credential_store,
         integration=integration,
+        backup_nodes=backup_nodes,
         transport=transport,
     )
 

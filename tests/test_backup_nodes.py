@@ -1,11 +1,14 @@
+import httpx
 import pytest
+from pydantic import SecretStr
 
 from clashsub.backup_nodes import BackupNodes, parse_backup_nodes
 from clashsub.cache_files import CacheFiles
 from clashsub.db import Database
 from clashsub.secret_store import SecretStore
 from clashsub.settings import SettingsStore
-from clashsub.subscription import InvalidSubscription
+from clashsub.sources import ResolvedSubscription
+from clashsub.subscription import InvalidSubscription, UpstreamRefresher
 
 
 BACKUP = "trojan://bak@node.example:443#bak\nss://YWVzLTI1Ni1nY206cGFzcw@node.example:8388#ss"
@@ -94,3 +97,93 @@ def test_save_clears_converted_only_when_activation_changes(tmp_path):
     stale = _stale_converted(nodes)
     nodes.save("  \n# only comments\n")
     assert not stale.exists()  # becomes inactive → cleared
+
+
+class FakeSource:
+    def __init__(self, name, results):
+        self.name = name
+        self.results = list(results)
+        self.calls = 0
+
+    async def fetch(self):
+        self.calls += 1
+        result = self.results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
+async def _public_resolver(hostname: str, port: int):
+    return ("93.184.216.34",)
+
+
+@pytest.mark.asyncio
+async def test_refresh_notifies_only_when_crossing_threshold(tmp_path):
+    db, nodes = _nodes(tmp_path)
+    nodes.save(BACKUP)
+    notified = []
+
+    async def hook():
+        notified.append(True)
+
+    source = FakeSource("fallback", [InvalidSubscription("down")] * 4)
+    refresher = UpstreamRefresher(
+        db,
+        nodes.cache,
+        (source,),
+        transport=httpx.MockTransport(lambda r: httpx.Response(500)),
+        resolver=_public_resolver,
+        backup=nodes,
+        on_refreshed=hook,
+    )
+    await refresher.refresh()
+    await refresher.refresh()
+    assert notified == []
+    await refresher.refresh()
+    assert len(notified) == 1
+    digest = db.runtime_state()["current_digest"]
+    assert digest is None
+
+
+@pytest.mark.asyncio
+async def test_success_clears_converted_when_leaving_backup(tmp_path):
+    db, nodes = _nodes(tmp_path)
+    payload = b"trojan://air@node.example:443#air\n"
+    digest = nodes.cache.publish_raw(payload, {})
+    db.record_refresh_success(digest, 1, "uri-list", {}, 1, "fallback")
+    nodes.save(BACKUP)
+    for i in range(3):
+        db.record_refresh_failure("all_sources_failed", i + 2)
+    converted = nodes.cache.root / "converted"
+    converted.mkdir(parents=True, exist_ok=True)
+    stale = converted / "stale.yaml"
+    stale.write_text("old", encoding="utf-8")
+
+    good = payload
+    source = FakeSource(
+        "fallback",
+        [
+            ResolvedSubscription(
+                "fallback",
+                SecretStr("https://sub.invalid/one"),
+                user_agent="clash.meta",
+            ),
+        ],
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=good)
+
+    refresher = UpstreamRefresher(
+        db,
+        nodes.cache,
+        (source,),
+        transport=httpx.MockTransport(handler),
+        resolver=_public_resolver,
+        backup=nodes,
+    )
+    result = await refresher.refresh()
+    assert result.updated is True
+    assert nodes.is_active() is False
+    assert db.runtime_state()["current_digest"] == digest
+    assert not stale.exists()
