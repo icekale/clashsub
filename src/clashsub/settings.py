@@ -26,6 +26,7 @@ class RuntimeSettings:
     health_night_interval_seconds: int = 600
     health_night_start_hour: int = 0
     health_night_end_hour: int = 8
+    backup_fail_threshold: int = 3
 
     def validated(self):
         if not 1 <= self.refresh_interval_minutes <= 1440:
@@ -68,6 +69,8 @@ class RuntimeSettings:
             raise ValueError("night window hours must be between 0 and 23")
         if self.health_night_start_hour == self.health_night_end_hour:
             raise ValueError("night window start and end hours must differ")
+        if not 1 <= self.backup_fail_threshold <= 20:
+            raise ValueError("backup fail threshold must be between 1 and 20")
         return self
 
     def is_night(self, hour: int) -> bool:
@@ -128,6 +131,7 @@ class SettingsStore:
             health_night_interval_seconds=self._parse_int(values, "health_night_interval_seconds", 600),
             health_night_start_hour=self._parse_int(values, "health_night_start_hour", 0),
             health_night_end_hour=self._parse_int(values, "health_night_end_hour", 8),
+            backup_fail_threshold=self._parse_int(values, "backup_fail_threshold", 3),
         ).validated()
 
     def update(self, settings: RuntimeSettings) -> RuntimeSettings:

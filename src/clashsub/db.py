@@ -335,6 +335,10 @@ class Database:
                     (name, version, nonce, ciphertext, updated_at),
                 )
 
+    def delete_encrypted_secret(self, name: str) -> None:
+        with self.transaction() as conn:
+            conn.execute("DELETE FROM encrypted_secrets WHERE name=?", (name,))
+
     def replace_node_health(self, records: list[tuple[str, int, float | None, float]]):
         with self.transaction() as conn:
             conn.execute("DELETE FROM node_health")

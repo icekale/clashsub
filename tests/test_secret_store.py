@@ -47,3 +47,14 @@ def test_secret_store_rejects_malformed_key(tmp_path):
     with pytest.raises(SecretStoreUnavailable, match="unavailable"):
         SecretStore(db, key).put("airport", "value")
 
+
+def test_secret_store_delete_is_idempotent(tmp_path):
+    db = Database(tmp_path / "state.db")
+    db.initialize()
+    store = SecretStore(db, _key_file(tmp_path))
+    store.put("backup_nodes", "trojan://pass@node.example:443#one")
+    store.delete("backup_nodes")
+    assert store.get("backup_nodes") is None
+    store.delete("backup_nodes")
+    assert store.get("backup_nodes") is None
+

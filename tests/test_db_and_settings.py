@@ -379,3 +379,16 @@ def test_settings_store_ignores_corrupt_values_instead_of_crashing(tmp_path: Pat
     settings = store.get()
     assert settings.refresh_interval_minutes == 60
     assert settings.health_refresh_online_ratio == 0.5
+
+
+def test_backup_fail_threshold_default_and_range(tmp_path: Path):
+    db = Database(tmp_path / "state.db")
+    db.initialize()
+    store = SettingsStore(db)
+    assert store.get().backup_fail_threshold == 3
+    store.update(RuntimeSettings(backup_fail_threshold=5))
+    assert store.get().backup_fail_threshold == 5
+    with pytest.raises(ValueError, match="backup fail threshold"):
+        RuntimeSettings(backup_fail_threshold=0).validated()
+    with pytest.raises(ValueError, match="backup fail threshold"):
+        RuntimeSettings(backup_fail_threshold=21).validated()

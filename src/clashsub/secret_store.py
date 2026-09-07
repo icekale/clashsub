@@ -71,3 +71,7 @@ class SecretStore:
     def put(self, name: str, value: str) -> None:
         version, nonce, ciphertext = self.seal(name, value)
         self.db.put_encrypted_secrets({name: (version, nonce, ciphertext)}, time.time())
+
+    def delete(self, name: str) -> None:
+        self._require()
+        self.db.delete_encrypted_secret(name)
