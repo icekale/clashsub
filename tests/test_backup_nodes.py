@@ -64,3 +64,33 @@ def test_empty_save_disables_even_at_threshold(tmp_path):
     result = nodes.save("  \n# only comments\n")
     assert result["configured"] is False
     assert nodes.is_active() is False
+
+
+def _stale_converted(nodes):
+    converted = nodes.cache.root / "converted"
+    converted.mkdir(parents=True, exist_ok=True)
+    stale = converted / "stale.yaml"
+    stale.write_text("old", encoding="utf-8")
+    return stale
+
+
+def test_save_clears_converted_only_when_activation_changes(tmp_path):
+    db, nodes = _nodes(tmp_path / "below")
+    stale = _stale_converted(nodes)
+    nodes.save(BACKUP)
+    assert stale.exists()  # still inactive → no clear
+
+    db, nodes = _nodes(tmp_path / "at")
+    for i in range(3):
+        db.record_refresh_failure("all_sources_failed", i)
+    stale = _stale_converted(nodes)
+    nodes.save(BACKUP)
+    assert not stale.exists()  # becomes active → cleared
+
+    db, nodes = _nodes(tmp_path / "off")
+    nodes.save(BACKUP)
+    for i in range(3):
+        db.record_refresh_failure("all_sources_failed", i)
+    stale = _stale_converted(nodes)
+    nodes.save("  \n# only comments\n")
+    assert not stale.exists()  # becomes inactive → cleared
