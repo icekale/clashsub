@@ -66,6 +66,7 @@ const credentials = reactive({
 const airportCredentials = reactive({ username: '', password: '' })
 const backupNodes = ref('')
 const backupError = ref('')
+const backupYamlInput = ref(null)
 const savingBackup = ref(false)
 function applyBackup(payload) { backupNodes.value = payload.nodes || '' }
 
@@ -278,7 +279,6 @@ async function saveSettings() {
 
 async function importBackupYaml(event) {
   const file = event.target.files?.[0]
-  event.target.value = ''
   if (!file) return
   try {
     backupNodes.value = await file.text()
@@ -286,6 +286,7 @@ async function importBackupYaml(event) {
   } catch {
     backupError.value = '无法读取文件'
   }
+  event.target.value = ''
 }
 
 async function saveBackup() {
@@ -544,14 +545,6 @@ onMounted(load)
       </div>
 
       <n-form :model="form" label-placement="top" class="settings-form-grid">
-        <n-form-item label="导入 YAML">
-          <input
-            type="file"
-            accept=".yaml,.yml,.txt,text/yaml,text/plain"
-            data-testid="backup-yaml-import"
-            @change="importBackupYaml"
-          />
-        </n-form-item>
         <n-form-item label="备用节点">
           <n-input
             v-model:value="backupNodes"
@@ -570,6 +563,15 @@ onMounted(load)
       </n-form>
 
       <div class="settings-actions">
+        <input
+          ref="backupYamlInput"
+          type="file"
+          accept=".yaml,.yml,.txt"
+          hidden
+          data-testid="backup-yaml-import"
+          @change="importBackupYaml"
+        />
+        <n-button @click="backupYamlInput?.click()">导入 YAML</n-button>
         <n-button type="primary" :loading="savingBackup" @click="saveBackup">保存备用节点</n-button>
       </div>
       <p v-if="backupError" class="form-error credential-error" role="alert">

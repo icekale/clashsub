@@ -418,4 +418,29 @@ describe('Settings', () => {
       expect.objectContaining({ method: 'PUT' }),
     )
   })
+
+  it('keeps the yaml file picker outside the backup form', async () => {
+    mockInitialLoad()
+    const wrapper = mountSettingsWithNaive()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="backup-yaml-import"]').element.closest('form')).toBeNull()
+  })
+
+  it('does not reset the file input until after the file is read', async () => {
+    mockInitialLoad()
+    const wrapper = mountSettings()
+    await flushPromises()
+    const yaml = 'proxies:\n  - name: bak\n'
+    const target = {
+      value: 'C:\\fakepath\\nodes.yaml',
+      files: [{
+        text: async () => {
+          expect(target.value).toBe('C:\\fakepath\\nodes.yaml')
+          return yaml
+        },
+      }],
+    }
+    await wrapper.vm.importBackupYaml({ target })
+    expect(target.value).toBe('')
+  })
 })
