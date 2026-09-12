@@ -17,6 +17,14 @@ function mountDialog(props) {
   })
 }
 
+function clickRadio(id) {
+  document.querySelector(`#${id}`).click()
+}
+
+function fieldValue(id) {
+  return document.querySelector(`textarea#${id}`).value
+}
+
 describe('SecretRevealDialog', () => {
   afterEach(() => {
     document.body.innerHTML = ''
@@ -57,6 +65,57 @@ describe('SecretRevealDialog', () => {
 
     expect(document.body.textContent).toContain('仅健康节点')
     expect(document.querySelector('textarea#subscription-clash-ha-url').value).toContain('/clash-ha/one-time')
+  })
+
+  it('offers visual parameter switches that only rewrite converter links', async () => {
+    mountDialog({
+      show: true,
+      urls: {
+        raw: 'https://sub.example/raw/one-time',
+        clashHa: 'https://sub.example/clash-ha/one-time',
+        clash: 'https://sub.example/clash/one-time',
+        smart: 'https://sub.example/smart/one-time',
+      },
+    })
+
+    expect(fieldValue('one-time-clash-url')).toBe('https://sub.example/clash/one-time')
+    expect(document.body.textContent).toContain('转换参数')
+
+    clickRadio('param-udp-true')
+    await flushPromises()
+    expect(fieldValue('one-time-clash-url')).toBe('https://sub.example/clash/one-time?udp=true')
+    expect(fieldValue('subscription-smart-url')).toBe('https://sub.example/smart/one-time?udp=true')
+    expect(fieldValue('one-time-raw-url')).toBe('https://sub.example/raw/one-time')
+    expect(fieldValue('subscription-clash-ha-url')).toBe('https://sub.example/clash-ha/one-time')
+
+    clickRadio('param-udp-false')
+    clickRadio('param-ver-3')
+    await flushPromises()
+    expect(fieldValue('one-time-clash-url')).toBe('https://sub.example/clash/one-time?udp=false&ver=3')
+  })
+
+  it('resets every switch back to 默认', async () => {
+    mountDialog({
+      show: true,
+      urls: { clash: 'https://sub.example/clash/one-time' },
+    })
+
+    clickRadio('param-emoji-true')
+    await flushPromises()
+    expect(fieldValue('one-time-clash-url')).toContain('emoji=true')
+
+    const reset = [...document.querySelectorAll('button')].find((button) => button.textContent.includes('恢复默认'))
+    await reset.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(fieldValue('one-time-clash-url')).toBe('https://sub.example/clash/one-time')
+    expect(document.querySelector('#param-emoji-default').checked).toBe(true)
+  })
+
+  it('hides the parameter panel when only raw links are available', () => {
+    mountDialog({ show: true, urls: { raw: 'https://sub.example/raw/one-time' } })
+
+    expect(document.body.textContent).not.toContain('转换参数')
   })
 
   it('stays open and selects the text when Clipboard API copying fails', async () => {

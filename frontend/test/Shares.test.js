@@ -15,6 +15,7 @@ import {
 
 import Shares from '../src/views/Shares.vue'
 import { api } from '../src/api.js'
+import { CLASH_SHARE_KINDS } from '../src/shareView.js'
 import { PopconfirmStub, viewStubs } from './viewStubs.js'
 
 
@@ -202,12 +203,7 @@ describe('Shares', () => {
   it('shows a retry hint when every historical link fails to load', async () => {
     api.request
       .mockResolvedValueOnce([{ ...summary, allow_clash: true, recoverable: true }])
-      .mockRejectedValueOnce(new Error('raw unavailable'))
-      .mockRejectedValueOnce(new Error('clash unavailable'))
-      .mockRejectedValueOnce(new Error('clash-ha unavailable'))
-      .mockRejectedValueOnce(new Error('surge unavailable'))
-      .mockRejectedValueOnce(new Error('loon unavailable'))
-      .mockRejectedValueOnce(new Error('smart unavailable'))
+      .mockRejectedValue(new Error('reveal unavailable'))
     const wrapper = mountShares()
     await flushPromises()
 
@@ -219,20 +215,18 @@ describe('Shares', () => {
   })
 
   it('merges successful links from a later partial retry', async () => {
+    let calls = 0
     api.request
       .mockResolvedValueOnce([{ ...summary, allow_clash: true, recoverable: true }])
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/raw/history' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/clash/history' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/clash-ha/history' })
-      .mockRejectedValueOnce(new Error('surge unavailable'))
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/loon/history' })
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/smart/history' })
-      .mockRejectedValueOnce(new Error('raw unavailable'))
-      .mockRejectedValueOnce(new Error('clash unavailable'))
-      .mockRejectedValueOnce(new Error('clash-ha unavailable'))
-      .mockResolvedValueOnce({ url: 'https://sub.example.com/surge/history' })
-      .mockRejectedValueOnce(new Error('loon unavailable'))
-      .mockRejectedValueOnce(new Error('smart unavailable'))
+      .mockImplementation(async (url, options) => {
+        calls += 1
+        const kind = options.body.kind
+        // 第一轮只有 raw 成功，第二轮全部成功：验证旧链接被保留且新链接被并入。
+        if (calls <= CLASH_SHARE_KINDS.length && kind !== 'raw') {
+          throw new Error(`${kind} unavailable`)
+        }
+        return { url: `https://sub.example.com/${kind}/history` }
+      })
     const wrapper = mountShares()
     await flushPromises()
 
@@ -241,11 +235,9 @@ describe('Shares', () => {
     await buttonWithText(wrapper, '重新获取链接').trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('https://sub.example.com/raw/history')
-    expect(wrapper.text()).toContain('https://sub.example.com/clash/history')
-    expect(wrapper.text()).toContain('https://sub.example.com/surge/history')
-    expect(wrapper.text()).toContain('https://sub.example.com/loon/history')
-    expect(wrapper.text()).toContain('https://sub.example.com/smart/history')
+    for (const kind of CLASH_SHARE_KINDS) {
+      expect(wrapper.text()).toContain(`https://sub.example.com/${kind}/history`)
+    }
   })
 
   it('disables reveal actions for a non-recoverable share', async () => {

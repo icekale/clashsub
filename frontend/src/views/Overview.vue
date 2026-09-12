@@ -7,6 +7,7 @@ import { api } from '../api.js'
 
 const data = ref(null)
 const health = ref(null)
+const diagnostics = ref(null)
 const error = ref('')
 const loading = ref(true)
 const refreshing = ref(false)
@@ -74,6 +75,22 @@ function formatBytes(value) {
   return `${value} B`
 }
 
+function formatUptime(seconds) {
+  if (seconds == null) return '—'
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟`
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} 小时 ${Math.floor((seconds % 3600) / 60)} 分`
+  return `${Math.floor(seconds / 86400)} 天 ${Math.floor((seconds % 86400) / 3600)} 小时`
+}
+
+async function loadDiagnostics() {
+  // 转换服务掉线不能连累概览页，单独请求、单独降级。
+  try {
+    diagnostics.value = await api.request('/api/admin/converter/diagnostics')
+  } catch (requestError) {
+    diagnostics.value = null
+  }
+}
+
 async function load() {
   // 首次加载显示骨架屏；已有数据时静默刷新，避免整页闪烁。
   if (!data.value) {
@@ -92,6 +109,7 @@ async function load() {
   } finally {
     loading.value = false
   }
+  await loadDiagnostics()
 }
 
 async function runHealthNow() {
@@ -277,6 +295,52 @@ onMounted(load)
         </div>
         <p v-else-if="health.total > 0" class="health-ok-note">最近检查未发现离线节点。</p>
       </template>
+    </section>
+
+    <section class="operation-panel" aria-labelledby="converter-facts-heading">
+      <div class="panel-heading">
+        <div>
+          <h2 id="converter-facts-heading">转换服务</h2>
+          <p>同容器回环运行的 SubConverter-Extended，仅管理端可见版本与统计。</p>
+        </div>
+        <n-tag :type="diagnostics?.available ? 'success' : 'default'">
+          {{ diagnostics?.available ? '运行中' : '未响应' }}
+        </n-tag>
+      </div>
+
+      <template v-if="diagnostics?.available">
+        <dl v-if="diagnostics.statistics" class="fact-grid">
+          <div>
+            <dt>上游版本</dt>
+            <dd>
+              {{ diagnostics.version || '未知' }}
+              <template v-if="diagnostics.commit">（{{ diagnostics.commit }}）</template>
+            </dd>
+          </div>
+          <div>
+            <dt>运行时长</dt>
+            <dd>{{ formatUptime(diagnostics.statistics.uptime_seconds) }}</dd>
+          </div>
+          <div>
+            <dt>24 小时订阅请求</dt>
+            <dd>{{ diagnostics.statistics.day.subscription_requests }} 次</dd>
+          </div>
+          <div>
+            <dt>24 小时规则转换</dt>
+            <dd>{{ diagnostics.statistics.day.rule_conversions }}</dd>
+          </div>
+          <div>
+            <dt>累计订阅请求</dt>
+            <dd>{{ diagnostics.statistics.lifetime.subscription_requests }} 次</dd>
+          </div>
+          <div>
+            <dt>失败 / 拒绝</dt>
+            <dd>{{ diagnostics.statistics.failed }} / {{ diagnostics.statistics.rejected }}</dd>
+          </div>
+        </dl>
+        <p v-else class="health-ok-note">上游统计未开启（pref.toml 的 statistics.enabled = false）。</p>
+      </template>
+      <p v-else class="health-ok-note">回环转换服务未响应，分享里的转换链接会返回 503。</p>
     </section>
   </template>
 </template>

@@ -190,6 +190,59 @@ describe('Overview', () => {
     expect(wrapper.text()).not.toContain('无可用缓存')
   })
 
+  it('shows loopback converter diagnostics', async () => {
+    api.request
+      .mockResolvedValueOnce(loadedOverview)
+      .mockResolvedValueOnce({ enabled: false, nodes: [] })
+      .mockResolvedValueOnce({
+        available: true,
+        version: '1.9.4',
+        commit: '2a0fde4',
+        statistics: {
+          uptime_seconds: 7200,
+          day: { subscription_requests: 10, rule_conversions: 606 },
+          lifetime: { subscription_requests: 40, rule_conversions: 1234 },
+          failed: 1,
+          rejected: 2,
+        },
+      })
+    const wrapper = mount(Overview, { global: { stubs: viewStubs } })
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(api.request).toHaveBeenCalledWith('/api/admin/converter/diagnostics')
+    expect(text).toContain('转换服务')
+    expect(text).toContain('1.9.4')
+    expect(text).toContain('2a0fde4')
+    expect(text).toContain('2 小时 0 分')
+    expect(text).toContain('606')
+    expect(text).toContain('1 / 2')
+  })
+
+  it('keeps the overview usable when converter diagnostics fail', async () => {
+    api.request
+      .mockResolvedValueOnce(loadedOverview)
+      .mockResolvedValueOnce({ enabled: false, nodes: [] })
+      .mockRejectedValueOnce(new Error('converter offline'))
+    const wrapper = mount(Overview, { global: { stubs: viewStubs } })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('回环转换服务未响应')
+    expect(wrapper.text()).toContain('缓存健康')
+    expect(wrapper.text()).not.toContain('无法读取运行状态')
+  })
+
+  it('reports statistics disabled upstream', async () => {
+    api.request
+      .mockResolvedValueOnce(loadedOverview)
+      .mockResolvedValueOnce({ enabled: false, nodes: [] })
+      .mockResolvedValueOnce({ available: true, version: null, commit: null, statistics: null })
+    const wrapper = mount(Overview, { global: { stubs: viewStubs } })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('上游统计未开启')
+  })
+
   it('warns when health checking is disabled', async () => {
     api.request
       .mockResolvedValueOnce(loadedOverview)

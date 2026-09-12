@@ -49,6 +49,9 @@ function showOneTimeLinks(payload) {
     clashHa: payload.clash_ha_url || '',
     surge: payload.surge_url || '',
     loon: payload.loon_url || '',
+    quanx: payload.quanx_url || '',
+    surfboard: payload.surfboard_url || '',
+    singbox: payload.singbox_url || '',
     smart: payload.smart_url || '',
   }
 }
