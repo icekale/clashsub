@@ -6,7 +6,10 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 
-TOKEN_PATH = re.compile(r"/(raw|clash|clash-ha|surge|loon|smart)/[^\s?#/]+")
+from .shares import SHARE_CONVERTED_KINDS
+
+# 订阅路由里的 token 不得进日志；kind 取自分享路由表，新增格式自动覆盖。
+TOKEN_PATH = re.compile(r"/(raw|" + "|".join(SHARE_CONVERTED_KINDS) + r")/[^\s?#/]+")
 QUERY = re.compile(r"(https?://[^\s?]+)\?[^\s]+")
 HEADER = re.compile(r"(?i)\b(authorization|cookie):\s*[^\r\n]+")
 FIELD = re.compile(r"(?i)\b(token|password)=([^&\s]+)")

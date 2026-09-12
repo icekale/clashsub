@@ -283,3 +283,96 @@ async def test_scheduler_honors_reschedule_during_refresh():
     await scheduler.stop()
     await task
     assert len(calls) >= 2
+
+
+DASHBOARD_STATISTICS = {
+    "enabled": True,
+    "generated_at": 1_800_000_500,
+    "revision": "2a0fde4",
+    "runtime": {"uptime_seconds": 7200, "launch_count": 3, "started_at": 1_799_999_000},
+    "windows": {
+        "day": {"subscription_requests": 10, "rule_conversions": 606},
+        "lifetime": {"subscription_requests": 40, "rule_conversions": 1234},
+    },
+    "request_lifecycle": {
+        "successful_responses": 39,
+        "stages": {
+            "fetch": {"p95_microseconds": 12_500},
+            "parse": {"p95_microseconds": 1_500},
+        },
+        "terminal": {"completed": 38, "failed": 1, "rejected": 2, "deadline_exceeded": 0},
+    },
+}
+
+
+def _converter_transport(version_status=200, dashboard_status=200, statistics=None):
+    payload = DASHBOARD_STATISTICS if statistics is None else statistics
+
+    def handler(request):
+        if request.url.path == "/version":
+            if version_status != 200:
+                return httpx.Response(version_status, text="nope")
+            return httpx.Response(
+                200,
+                text=(
+                    '<a href="https://github.com/Aethersailor/SubConverter-Extended/commit/2a0fde4">'
+                    "commit</a><span>v1.9.4</span>"
+                ),
+            )
+        if request.url.path == "/dashboard/data":
+            if dashboard_status != 200:
+                return httpx.Response(dashboard_status, text="nope")
+            return httpx.Response(200, json=payload)
+        return httpx.Response(404, text="not found")
+
+    return httpx.MockTransport(handler)
+
+
+def test_converter_diagnostics_summarizes_upstream_statistics(app_settings):
+    with TestClient(
+        create_app(app_settings, transport=_converter_transport(), start_scheduler=False),
+        client=("127.0.0.1", 50000),
+    ) as client:
+        assert client.get("/api/admin/converter/diagnostics").status_code == 401
+        login(client)
+        payload = client.get("/api/admin/converter/diagnostics").json()
+
+    assert payload["available"] is True
+    assert payload["version"] == "1.9.4"
+    assert payload["commit"] == "2a0fde4"
+    statistics = payload["statistics"]
+    assert statistics["uptime_seconds"] == 7200
+    assert statistics["day"] == {"subscription_requests": 10, "rule_conversions": 606}
+    assert statistics["lifetime"] == {"subscription_requests": 40, "rule_conversions": 1234}
+    assert statistics["failed"] == 1 and statistics["rejected"] == 2
+    assert statistics["fetch_p95_ms"] == 12.5 and statistics["parse_p95_ms"] == 1.5
+    # 上游的巨型 JSON 不转发给浏览器，只留下这几个数。
+    assert "country_windows" not in payload and "series" not in payload
+
+
+def test_converter_diagnostics_reports_unavailable_upstream(app_settings):
+    with TestClient(
+        create_app(
+            app_settings,
+            transport=_converter_transport(version_status=502, dashboard_status=502),
+            start_scheduler=False,
+        ),
+        client=("127.0.0.1", 50000),
+    ) as client:
+        login(client)
+        payload = client.get("/api/admin/converter/diagnostics").json()
+
+    assert payload == {"available": False, "version": None, "commit": None, "statistics": None}
+
+
+def test_converter_diagnostics_hides_statistics_when_disabled_upstream(app_settings):
+    transport = _converter_transport(statistics={"enabled": False, "windows": {}})
+    with TestClient(
+        create_app(app_settings, transport=transport, start_scheduler=False),
+        client=("127.0.0.1", 50000),
+    ) as client:
+        login(client)
+        payload = client.get("/api/admin/converter/diagnostics").json()
+
+    assert payload["available"] is True
+    assert payload["statistics"] is None

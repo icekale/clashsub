@@ -73,7 +73,17 @@ class UpstreamCredentialsRequest(BaseModel):
 
 
 class RevealShareRequest(BaseModel):
-    kind: Literal["raw", "clash", "clash-ha", "surge", "loon", "smart"]
+    kind: Literal[
+        "raw",
+        "clash",
+        "clash-ha",
+        "surge",
+        "loon",
+        "quanx",
+        "surfboard",
+        "singbox",
+        "smart",
+    ]
 
 
 class BackupNodesRequest(BaseModel):
@@ -132,6 +142,13 @@ def overview(request: Request):
         "backup_configured": backup_status["configured"],
         "backup_node_count": backup_status["node_count"],
     }
+
+
+@router.get("/converter/diagnostics")
+async def converter_diagnostics(request: Request):
+    require_admin(request)
+    services = _services(request)
+    return await services.converter.diagnostics()
 
 
 @router.get("/shares")
