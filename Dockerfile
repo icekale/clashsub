@@ -5,7 +5,8 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run test && npm run build
 
-FROM aethersailor/subconverter-extended:v1.2.0 AS converter
+# 上游只发布版本号 tag；v1.9.4 由提交 2a0fde4 构建（/version 页面里的 commit 链接可复核）。
+FROM aethersailor/subconverter-extended:v1.9.4 AS converter
 
 FROM python:3.13-slim-trixie AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -37,6 +38,7 @@ RUN chmod +x /usr/local/bin/start-subconverter \
     && mkdir -p /data \
     && chown -R clashsub:clashsub /data /app
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY pref-patch.awk /usr/local/bin/pref-patch.awk
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 USER 10001:10001
 EXPOSE 8080

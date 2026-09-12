@@ -6,12 +6,17 @@ import yaml
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
+from ..converter import client_params
 from ..events import get_logger
 
 
 router = APIRouter()
 logger = get_logger("public")
 _SAFE_HEADERS = {"subscription-userinfo", "profile-update-interval"}
+_MEDIA_TYPES = {
+    "clash": "text/yaml; charset=utf-8",
+    "singbox": "application/json; charset=utf-8",
+}
 
 
 def _services(request: Request):
@@ -213,12 +218,16 @@ async def _converted_subscription(token: str, request: Request, format: str):
             format,
             public_raw_url=public_raw_url,
             source_digest=source_digest,
+            params=client_params(request.query_params),
         )
     except RuntimeError as exc:
         logger.warning("converter unavailable format=%s", format)
         raise HTTPException(503, "converter unavailable") from exc
-    media_type = "text/yaml; charset=utf-8" if format == "clash" else "text/plain; charset=utf-8"
-    return Response(body, media_type=media_type, headers=headers)
+    return Response(
+        body,
+        media_type=_MEDIA_TYPES.get(format, "text/plain; charset=utf-8"),
+        headers=headers,
+    )
 
 
 @router.get("/clash/{token}")
@@ -236,6 +245,21 @@ async def loon_subscription(token: str, request: Request):
     return await _converted_subscription(token, request, "loon")
 
 
+@router.get("/quanx/{token}")
+async def quanx_subscription(token: str, request: Request):
+    return await _converted_subscription(token, request, "quanx")
+
+
+@router.get("/surfboard/{token}")
+async def surfboard_subscription(token: str, request: Request):
+    return await _converted_subscription(token, request, "surfboard")
+
+
+@router.get("/singbox/{token}")
+async def singbox_subscription(token: str, request: Request):
+    return await _converted_subscription(token, request, "singbox")
+
+
 @router.get("/smart/{token}")
 async def smart_subscription(token: str, request: Request):
     user_agent = request.headers.get("user-agent", "").lower()
@@ -243,6 +267,12 @@ async def smart_subscription(token: str, request: Request):
         return await _converted_subscription(token, request, "surge")
     if "loon" in user_agent:
         return await _converted_subscription(token, request, "loon")
+    if "quantumult" in user_agent:
+        return await _converted_subscription(token, request, "quanx")
+    if "surfboard" in user_agent:
+        return await _converted_subscription(token, request, "surfboard")
+    if "sing-box" in user_agent or "singbox" in user_agent:
+        return await _converted_subscription(token, request, "singbox")
     if any(
         marker in user_agent
         for marker in ("clash", "mihomo", "openclash", "stash", "karing")

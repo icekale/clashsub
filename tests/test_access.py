@@ -2,6 +2,7 @@ import logging
 
 from clashsub.access import AccessPolicy, SlidingWindowLimiter
 from clashsub.events import redact
+from clashsub.shares import SHARE_CONVERTED_KINDS
 
 
 def test_untrusted_forwarded_header_cannot_turn_public_ip_private():
@@ -41,6 +42,7 @@ def test_rate_limiter_caps_distinct_keys():
 
 
 def test_redaction_covers_all_share_formats():
-    for route in ("raw", "clash", "surge", "loon", "smart"):
+    # 路由表来自后端定义，新增格式而漏了脱敏会直接在这里失败。
+    for route in ("raw", *SHARE_CONVERTED_KINDS):
         text = redact(f"GET /{route}/abcdefghijklmnopqrstuvwxyz012345 HTTP/1.1")
         assert "abcdefghijklmnopqrstuvwxyz012345" not in text

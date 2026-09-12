@@ -83,20 +83,24 @@ class CacheFiles:
                 except OSError:
                     pass
 
-    def _converter_path(self, share_id: str, format: str = "clash") -> Path:
+    def _converter_path(self, share_id: str, format: str = "clash", key: str = "") -> Path:
+        """模板文件路径：``key`` 是客户端参数的指纹（见 converter.params_key）。"""
         normalized = str(uuid.UUID(share_id))
-        if format == "clash":
+        if format == "clash" and not key:
             return self.root / "converted" / f"{normalized}.yaml"
-        return self.root / "converted" / f"{normalized}-{format}.conf"
+        suffix = {"singbox": "json", "clash": "yaml"}.get(format, "conf")
+        return self.root / "converted" / f"{normalized}-{format}{f'-{key}' if key else ''}.{suffix}"
 
-    def write_converter_template(self, share_id: str, text: str, format: str = "clash") -> None:
-        self._atomic_write(self._converter_path(share_id, format), text.encode("utf-8"))
+    def write_converter_template(
+        self, share_id: str, text: str, format: str = "clash", key: str = ""
+    ) -> None:
+        self._atomic_write(self._converter_path(share_id, format, key), text.encode("utf-8"))
 
-    def read_converter_template(self, share_id: str, format: str = "clash") -> str:
-        return self._converter_path(share_id, format).read_text(encoding="utf-8")
+    def read_converter_template(self, share_id: str, format: str = "clash", key: str = "") -> str:
+        return self._converter_path(share_id, format, key).read_text(encoding="utf-8")
 
-    def converter_mtime(self, share_id: str, format: str = "clash") -> float:
-        return self._converter_path(share_id, format).stat().st_mtime
+    def converter_mtime(self, share_id: str, format: str = "clash", key: str = "") -> float:
+        return self._converter_path(share_id, format, key).stat().st_mtime
 
     def remove_converted(self, share_id: str) -> None:
         normalized = str(uuid.UUID(share_id))

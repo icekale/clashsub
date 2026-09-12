@@ -97,6 +97,9 @@ def test_admin_list_carries_existing_urls_without_reveal_posts(app_settings, tmp
             "clash-ha": created["clash_ha_url"],
             "surge": created["surge_url"],
             "loon": created["loon_url"],
+            "quanx": created["quanx_url"],
+            "surfboard": created["surfboard_url"],
+            "singbox": created["singbox_url"],
             "smart": created["smart_url"],
         }
 

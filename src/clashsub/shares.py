@@ -6,10 +6,17 @@ import time
 import uuid
 from dataclasses import dataclass
 
+from .converter import CONVERTER_FORMATS
 from .db import Database
 from .secret_store import SecretStore, SecretStoreUnavailable
 from .settings import SettingsStore
 
+# 分享里允许的 kind：clash 与健康节点在最前，其余转换格式跟上游格式表一致，智能 UA 路由在最后。
+SHARE_CONVERTED_KINDS = (
+    ("clash", "clash-ha")
+    + tuple(format for format in CONVERTER_FORMATS if format != "clash")
+    + ("smart",)
+)
 
 def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
@@ -23,6 +30,9 @@ class CreatedShare:
     clash_ha_url: str | None
     surge_url: str | None
     loon_url: str | None
+    quanx_url: str | None
+    surfboard_url: str | None
+    singbox_url: str | None
     smart_url: str | None
     expires_at: float
 
@@ -63,6 +73,9 @@ class ShareService:
             self._format_url(base, token, "clash-ha") if allow_clash else None,
             self._format_url(base, token, "surge") if allow_clash else None,
             self._format_url(base, token, "loon") if allow_clash else None,
+            self._format_url(base, token, "quanx") if allow_clash else None,
+            self._format_url(base, token, "surfboard") if allow_clash else None,
+            self._format_url(base, token, "singbox") if allow_clash else None,
             f"{base}/smart/{token}" if allow_clash else None,
             expires_at,
         )
@@ -176,14 +189,14 @@ class ShareService:
             return {}
         kinds = ["raw"] if row["allow_raw"] else []
         if row["allow_clash"]:
-            kinds += ["clash", "clash-ha", "surge", "loon", "smart"]
+            kinds += list(SHARE_CONVERTED_KINDS)
         return {kind: self._format_url(row["base_url"], token, kind) for kind in kinds}
 
     def reveal(self, share_id: str, kind: str) -> str:
         row = self.db.get_share(share_id)
         if not row or row["revoked_at"] is not None or row["expires_at"] <= time.time():
             raise KeyError("share not found")
-        clash_kinds = {"clash", "clash-ha", "surge", "loon", "smart"}
+        clash_kinds = set(SHARE_CONVERTED_KINDS)
         if kind not in {"raw"} | clash_kinds or (kind == "raw" and not row["allow_raw"]) or (
             kind in clash_kinds and not row["allow_clash"]
         ):

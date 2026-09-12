@@ -21,10 +21,18 @@ from .integration import IntegrationService
 from .scheduler import RefreshScheduler
 from .settings import RuntimeSettings, SettingsStore
 from .secret_store import SecretStore, SecretStoreUnavailable
-from .shares import ShareService
+from .shares import SHARE_CONVERTED_KINDS, ShareService
 from .sources import StaticUrlSource, V2BoardSubscriptionSource
 from .subscription import UpstreamRefresher
 from .v2board_client import V2BoardClient
+
+# 需要过访问模式校验的路由前缀：管理页、管理接口、原始订阅与全部转换/智能订阅路由。
+PROTECTED_PREFIXES = (
+    "/app",
+    "/api",
+    "/raw",
+    *(f"/{kind}" for kind in SHARE_CONVERTED_KINDS),
+)
 
 
 @dataclass
@@ -205,7 +213,7 @@ def create_app(
         path = request.url.path
         protected = any(
             path == prefix or path.startswith(f"{prefix}/")
-            for prefix in ("/app", "/api", "/raw", "/clash", "/clash-ha", "/surge", "/loon", "/smart")
+            for prefix in PROTECTED_PREFIXES
         )
         if protected:
             services = request.app.state.services

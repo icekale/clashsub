@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 
 import yaml
 
@@ -50,7 +51,7 @@ def test_compose_runs_converter_inside_the_single_container():
 def test_dockerfile_merges_converter_sidecar_into_runtime_image():
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
 
-    assert "FROM aethersailor/subconverter-extended:v1.2.0 AS converter" in dockerfile
+    assert "FROM aethersailor/subconverter-extended:v1.9.4 AS converter" in dockerfile
     assert "FROM python:3.13-slim-trixie AS runtime" in dockerfile
     assert "COPY --from=converter /usr/bin/subconverter /usr/bin/subconverter" in dockerfile
     assert "COPY --from=converter /usr/lib/libmihomo.so /usr/lib/libmihomo.so" in dockerfile
@@ -69,6 +70,55 @@ def test_entrypoint_starts_sidecar_then_execs_main_command():
     assert "PREF_PATH=/tmp/subconverter/pref.toml" in entrypoint
     assert "127.0.0.1:25500/version" in entrypoint
     assert 'exec "$@"' in entrypoint
+
+
+def test_entrypoint_derives_pref_from_image_example_with_assertions():
+    entrypoint = (ROOT / "docker-entrypoint.sh").read_text(encoding="utf-8")
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "awk -f /usr/local/bin/pref-patch.awk /base/pref.example.toml" in entrypoint
+    assert "COPY pref-patch.awk /usr/local/bin/pref-patch.awk" in dockerfile
+
+
+def test_pref_patch_overrides_only_the_expected_keys(tmp_path):
+    source = tmp_path / "pref.example.toml"
+    source.write_text(
+        "[managed_config]\nwrite_managed_config = true\n"
+        "[remote_subscription]\nsurge_policy_path = true\nsurfboard_policy_path = true\nloon_remote_proxy = true\n"
+        "[statistics]\nenabled = false\ndata_dir = \"stats\"\nflush_interval = 5\n"
+        "[security]\nprofile = \"lan\"\nallow_public_upload = false\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["awk", "-f", str(ROOT / "pref-patch.awk"), str(source)],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "write_managed_config = false" in result.stdout
+    assert "surge_policy_path = false" in result.stdout
+    assert "surfboard_policy_path = false" in result.stdout
+    assert "loon_remote_proxy = false" in result.stdout
+    assert "enabled = true" in result.stdout
+    assert 'data_dir = "/data/stats"' in result.stdout
+    # 未被覆写的键原样保留
+    assert "flush_interval = 5" in result.stdout
+    assert "allow_public_upload = false" in result.stdout
+    assert 'profile = "lan"' in result.stdout
+
+
+def test_pref_patch_fails_when_an_expected_key_disappears(tmp_path):
+    source = tmp_path / "pref.example.toml"
+    source.write_text("[managed_config]\nwrite_managed_config = true\n", encoding="utf-8")
+    result = subprocess.run(
+        ["awk", "-f", str(ROOT / "pref-patch.awk"), str(source)],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "remote_subscription.surge_policy_path" in result.stderr
 
 
 def test_readme_prompts_for_secret_values_without_literal_password_examples():
