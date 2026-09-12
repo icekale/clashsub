@@ -37,6 +37,8 @@ describe('share view helpers', () => {
   it('keeps the parameter object in sync with the query string', () => {
     expect(activeParams({ emoji: '', udp: 'true', ver: ' 4 ' })).toEqual({ udp: 'true', ver: '4' })
     expect(paramsQuery({ emoji: '', udp: 'true', ver: ' 4 ' })).toBe('udp=true&ver=4')
+    expect(activeParams({ template: 'lite', udp: 'true' })).toEqual({ template: 'lite', udp: 'true' })
+    expect(paramsQuery({ template: 'lite' })).toBe('template=lite')
     expect(activeParams(null)).toEqual({})
   })
 

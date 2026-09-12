@@ -37,7 +37,21 @@ function reset() {
           {{ param.label }}
           <small>{{ param.hint }}</small>
         </span>
-        <div class="param-choices">
+        <select
+          v-if="param.select"
+          :id="`param-${param.key}`"
+          v-model="modelValue[param.key]"
+          class="param-select"
+        >
+          <option
+            v-for="choice in paramChoices(param)"
+            :key="choice.value || 'default'"
+            :value="choice.value"
+          >
+            {{ choice.label }}
+          </option>
+        </select>
+        <div v-else class="param-choices">
           <label
             v-for="choice in paramChoices(param)"
             :key="choice.value || 'default'"

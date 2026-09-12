@@ -11,6 +11,7 @@ from clashsub.cache_files import CacheFiles
 from clashsub.converter import (
     BOOLEAN_PARAMS,
     CONVERTER_FORMATS,
+    TEMPLATES,
     ConverterService,
     client_params,
     params_key,
@@ -114,6 +115,38 @@ async def test_client_parameters_reach_upstream_and_split_the_cache(tmp_path):
     assert (tmp_path / "converted" / f"{share_id}-clash-{key}.yaml").exists()
 
 
+@pytest.mark.asyncio
+async def test_template_alias_becomes_config_and_drops_raw_config(tmp_path):
+    """template 是我们的别名；config 永远不从客户端直通。"""
+    seen = []
+    service = ConverterService(
+        CacheFiles(tmp_path),
+        "https://converter.example.test",
+        httpx.MockTransport(lambda request: _handler(request, seen)),
+    )
+    share_id = "00000000-0000-0000-0000-000000000003"
+    raw_url = "https://sub.example.test/raw/token"
+    params = client_params({"template": "lite", "config": "/etc/passwd"})
+
+    await service.render(share_id, raw_url, "clash", params=params)
+
+    assert params == {"config": TEMPLATES["lite"]}
+    assert seen[0]["params"]["config"] == TEMPLATES["lite"]
+    assert "template" not in seen[0]["params"]
+    assert client_params({"template": "../etc/passwd"}) == {}
+    assert client_params({"template": "Custom_Clash.ini"}) == {}
+    assert set(TEMPLATES) == {
+        "standard",
+        "standard-fallback",
+        "lite",
+        "lite-fallback",
+        "gfw",
+        "gfw-fallback",
+        "full",
+        "full-fallback",
+    }
+
+
 def test_frontend_parameter_picker_stays_inside_the_whitelist():
     """前端勾选面板抄一份参数表，这里守住两边不漂移。"""
     source = (ROOT / "frontend" / "src" / "shareView.js").read_text(encoding="utf-8")
@@ -121,7 +154,10 @@ def test_frontend_parameter_picker_stays_inside_the_whitelist():
     assert block, "shareView.js 里的 CONVERT_PARAMS 结构变了，同步更新这个测试"
     keys = set(re.findall(r"key: '([a-z_]+)'", block.group(1)))
 
-    assert keys == set(BOOLEAN_PARAMS) | {"ver"}
+    assert keys == set(BOOLEAN_PARAMS) | {"ver", "template"}
+    templates = re.search(r"export const CONVERT_TEMPLATES = \[(.*?)\n\]", source, re.S)
+    assert templates, "shareView.js 里的 CONVERT_TEMPLATES 结构变了，同步更新这个测试"
+    assert set(re.findall(r"value: '([a-z-]+)'", templates.group(1))) == set(TEMPLATES)
 
     # 面板只挂在真的会读查询串的路由上：/raw 直出、/clash-ha 本地过滤都不看参数。
     kinds = set(re.search(r"export const CONVERTER_KINDS = \[(.*?)\]", source, re.S).group(1)

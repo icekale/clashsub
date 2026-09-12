@@ -771,6 +771,17 @@ p {
   font-size: 11px;
 }
 
+.param-select {
+  max-width: 100%;
+  min-width: 12em;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+}
+
 .param-choices {
   display: flex;
   flex-wrap: wrap;

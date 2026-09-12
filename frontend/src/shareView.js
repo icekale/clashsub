@@ -15,9 +15,29 @@ const KIND_LABELS = {
 // 参数只对走转换器的路由生效：/raw 直出、/clash-ha 本地过滤都不看查询串。
 export const CONVERTER_KINDS = ['clash', 'surge', 'loon', 'quanx', 'surfboard', 'singbox', 'smart']
 
+// 与后端 converter.TEMPLATES 键一一对应（test_multi_format_subscriptions.py 守漂移）。
+export const CONVERT_TEMPLATES = [
+  { value: 'standard', label: '标准版' },
+  { value: 'standard-fallback', label: '标准版 · 故障转移' },
+  { value: 'lite', label: '轻量版' },
+  { value: 'lite-fallback', label: '轻量版 · 故障转移' },
+  { value: 'gfw', label: '极简版 (GFW)' },
+  { value: 'gfw-fallback', label: '极简版 (GFW) · 故障转移' },
+  { value: 'full', label: '重度分流版' },
+  { value: 'full-fallback', label: '重度分流版 · 故障转移' },
+]
+
 // 与后端 converter.BOOLEAN_PARAMS 白名单一一对应（tests/test_multi_format_subscriptions.py 会
 // 校验两边不漂移）；空串表示不传该参数，跟随上游默认。
 export const CONVERT_PARAMS = [
+  {
+    key: 'template',
+    label: '规则模板',
+    hint: 'Aethersailor 分流规则；默认即标准版',
+    select: true,
+    defaultLabel: '默认（标准版）',
+    choices: CONVERT_TEMPLATES,
+  },
   { key: 'emoji', label: 'Emoji', hint: '节点名称 Emoji 总开关' },
   { key: 'list', label: '仅节点列表', hint: '不生成策略组与规则' },
   { key: 'sort', label: '节点名排序', hint: '按名称排序节点' },
@@ -37,9 +57,11 @@ const DEFAULT_CHOICES = [
 ]
 
 export function paramChoices(param) {
-  return (param.choices || []).length
-    ? [{ value: '', label: '默认' }, ...param.choices.map((value) => ({ value, label: value }))]
-    : DEFAULT_CHOICES
+  if (!(param.choices || []).length) return DEFAULT_CHOICES
+  const choices = param.choices.map((value) =>
+    typeof value === 'object' ? value : { value, label: value },
+  )
+  return [{ value: '', label: param.defaultLabel || '默认' }, ...choices]
 }
 
 // 已选中的参数（对象形式，给转换预览接口用）；空串=不传，跟随上游默认。

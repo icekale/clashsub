@@ -26,9 +26,9 @@ SUPPORTED_FORMATS = frozenset(CONVERTER_FORMATS)
 # Surge/Surfboard 同为 INI 方言，允许服务端代写 #!MANAGED-CONFIG。
 MANAGED_HEADER_FORMATS = frozenset({"surge", "surfboard"})
 
-# 客户端可通过订阅地址覆盖的上游参数白名单。只收布尔与少量整数：正则类的
-# rename/include/exclude/filter 会在转换进程里编译客户端提供的正则（ReDoS），
-# config 能读容器内任意基础模板，upload/upload_path 会把订阅推送到第三方地址。
+# 客户端可通过订阅地址覆盖的上游参数白名单。只收布尔、少量整数、以及我们自己的
+# template 别名：正则类的 rename/include/exclude/filter 会在转换进程里编译客户
+# 端提供的正则（ReDoS），config 能读容器内任意文件，upload 会把订阅推到第三方。
 BOOLEAN_PARAMS = (
     "emoji",
     "list",
@@ -49,6 +49,23 @@ BOOLEAN_VALUES = {
     "no": "false",
 }
 
+# ponytail: 远程 jsdelivr，跟上游 default_external_config 同一面镜像；规则集体积大了再打进镜像。
+_AETHER_CFG = (
+    "https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules"
+    "@refs/heads/main/cfg"
+)
+TEMPLATES = {
+    "standard": f"{_AETHER_CFG}/Custom_Clash.ini",
+    "standard-fallback": f"{_AETHER_CFG}/Custom_Clash_Fallback.ini",
+    "lite": f"{_AETHER_CFG}/Custom_Clash_Lite.ini",
+    "lite-fallback": f"{_AETHER_CFG}/Custom_Clash_Lite_Fallback.ini",
+    "gfw": f"{_AETHER_CFG}/Custom_Clash_GFW.ini",
+    "gfw-fallback": f"{_AETHER_CFG}/Custom_Clash_GFW_Fallback.ini",
+    "full": f"{_AETHER_CFG}/Custom_Clash_Full.ini",
+    "full-fallback": f"{_AETHER_CFG}/Custom_Clash_Full_Fallback.ini",
+}
+
+
 def client_params(query) -> dict[str, str]:
     """从订阅请求的查询串里挑出白名单参数，其余一律忽略。"""
     params: dict[str, str] = {}
@@ -59,6 +76,9 @@ def client_params(query) -> dict[str, str]:
     version = str(query.get("ver", "")).strip()
     if version.isdigit() and 2 <= int(version) <= 4:
         params["ver"] = version
+    template = str(query.get("template", "")).strip()
+    if template in TEMPLATES:
+        params["config"] = TEMPLATES[template]
     return params
 
 
