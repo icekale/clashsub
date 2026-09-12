@@ -2,7 +2,8 @@
 import { computed, reactive, ref } from 'vue'
 import { NButton, NModal } from 'naive-ui'
 
-import { CONVERTER_KINDS, CONVERT_PARAMS, copyText, paramChoices, withParams } from '../shareView.js'
+import { CONVERTER_KINDS, CONVERT_PARAMS, copyText, withParams } from '../shareView.js'
+import ConvertParamPicker from './ConvertParamPicker.vue'
 
 
 const FIELDS = [
@@ -36,10 +37,6 @@ const fields = computed(() =>
 )
 const tunable = computed(() => fields.value.some((field) => CONVERTER_KINDS.includes(field.key)))
 
-function resetParams() {
-  for (const param of CONVERT_PARAMS) params[param.key] = ''
-}
-
 function close() {
   emit('update:show', false)
 }
@@ -67,45 +64,7 @@ async function copy(field) {
         <n-button quaternary aria-label="关闭链接窗口" @click="close">关闭</n-button>
       </div>
 
-      <fieldset v-if="tunable" class="convert-params">
-        <legend>转换参数</legend>
-        <p class="convert-params-hint">
-          只影响转换类链接（Clash、Surge、Loon、Quantumult X、Surfboard、sing-box、智能）；
-          原始订阅与仅健康节点链接不会带上这些参数。
-        </p>
-        <div class="param-list">
-          <div
-            v-for="param in CONVERT_PARAMS"
-            :key="param.key"
-            class="param-row"
-            role="group"
-            :aria-labelledby="`param-${param.key}-label`"
-          >
-            <span :id="`param-${param.key}-label`" class="param-label">
-              {{ param.label }}
-              <small>{{ param.hint }}</small>
-            </span>
-            <div class="param-choices">
-              <label
-                v-for="choice in paramChoices(param)"
-                :key="choice.value || 'default'"
-                class="param-choice"
-                :class="{ 'param-choice-risk': param.risk && choice.value === 'true' }"
-              >
-                <input
-                  :id="`param-${param.key}-${choice.value || 'default'}`"
-                  v-model="params[param.key]"
-                  type="radio"
-                  :name="`param-${param.key}`"
-                  :value="choice.value"
-                />
-                <span>{{ choice.label }}</span>
-              </label>
-            </div>
-          </div>
-        </div>
-        <n-button quaternary size="small" @click="resetParams">恢复默认</n-button>
-      </fieldset>
+      <convert-param-picker v-if="tunable" :model-value="params" />
 
       <div v-for="field in fields" :key="field.key" class="secret-field">
         <label :for="field.id">{{ field.label }}</label>

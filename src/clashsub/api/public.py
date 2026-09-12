@@ -124,6 +124,24 @@ def healthz():
     return {"status": "ok"}
 
 
+@router.get("/internal/raw")
+async def internal_raw(request: Request):
+    """同容器转换进程按 URL 拉取原始订阅用的内部通道：不需要分享 token。
+
+    只认真实对端地址（不看 X-Forwarded-For），反代转发的请求一律 404，
+    所以外网无法借伪造头拿到这条免鉴权路径。
+    """
+    if request.client is None or not _is_loopback(request.client.host):
+        raise HTTPException(404)
+    services = _services(request)
+    await _refresh_state(services)
+    return Response(
+        _served_snapshot(services).payload,
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @router.get("/raw/{token}")
 async def raw_subscription(token: str, request: Request):
     _allow_request(request, "share")

@@ -4,7 +4,7 @@ import { useMessage } from 'naive-ui'
 
 import { api } from '../api.js'
 import SecretRevealDialog from '../components/SecretRevealDialog.vue'
-import { buildShareRequest, CLASH_SHARE_KINDS, copyText, kindLabel, statusLabel } from '../shareView.js'
+import { buildShareRequest, CLASH_SHARE_KINDS, copyText, kindLabel, shareDialogUrls, statusLabel } from '../shareView.js'
 
 
 const message = useMessage()
@@ -43,17 +43,7 @@ function statusType(item) {
 
 function showOneTimeLinks(payload) {
   reveal.show = true
-  reveal.urls = {
-    raw: payload.raw_url,
-    clash: payload.clash_url || '',
-    clashHa: payload.clash_ha_url || '',
-    surge: payload.surge_url || '',
-    loon: payload.loon_url || '',
-    quanx: payload.quanx_url || '',
-    surfboard: payload.surfboard_url || '',
-    singbox: payload.singbox_url || '',
-    smart: payload.smart_url || '',
-  }
+  reveal.urls = shareDialogUrls(payload)
 }
 
 function setRevealVisibility(visible) {

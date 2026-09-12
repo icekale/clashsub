@@ -42,13 +42,42 @@ export function paramChoices(param) {
     : DEFAULT_CHOICES
 }
 
-export function paramsQuery(values) {
-  return CONVERT_PARAMS.map((param) => {
+// 已选中的参数（对象形式，给转换预览接口用）；空串=不传，跟随上游默认。
+export function activeParams(values) {
+  const active = {}
+  for (const param of CONVERT_PARAMS) {
     const value = String(values?.[param.key] ?? '').trim()
-    return value ? `${param.key}=${encodeURIComponent(value)}` : ''
-  })
-    .filter(Boolean)
+    if (value) active[param.key] = value
+  }
+  return active
+}
+
+export function paramsQuery(values) {
+  return Object.entries(activeParams(values))
+    .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
     .join('&')
+}
+
+// 下载转换结果的扩展名：Clash 是 YAML，sing-box 是 JSON，其余是 INI 方言。
+const KIND_SUFFIXES = { clash: 'yaml', singbox: 'json' }
+
+export function downloadFilename(kind, label = 'clashsub') {
+  return `${label}-${kind}.${KIND_SUFFIXES[kind] || 'conf'}`
+}
+
+// 新建/轮换分享的返回值 → 链接弹窗字段（raw/clash/clashHa/…）。
+export function shareDialogUrls(payload) {
+  return {
+    raw: payload.raw_url,
+    clash: payload.clash_url || '',
+    clashHa: payload.clash_ha_url || '',
+    surge: payload.surge_url || '',
+    loon: payload.loon_url || '',
+    quanx: payload.quanx_url || '',
+    surfboard: payload.surfboard_url || '',
+    singbox: payload.singbox_url || '',
+    smart: payload.smart_url || '',
+  }
 }
 
 export function withParams(url, values) {

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useMessage } from 'naive-ui'
 
 import { api } from '../api.js'
+import ConverterConsole from '../components/ConverterConsole.vue'
 
 
 const data = ref(null)
@@ -341,6 +342,8 @@ onMounted(load)
         <p v-else class="health-ok-note">上游统计未开启（pref.toml 的 statistics.enabled = false）。</p>
       </template>
       <p v-else class="health-ok-note">回环转换服务未响应，分享里的转换链接会返回 503。</p>
+
+      <converter-console />
     </section>
   </template>
 </template>

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from ..events import read_recent_events
+from ..converter import client_params
 from ..events import get_logger
 from ..integration import OPENCLASH_SECRET_NAME
 from ..subscription import InvalidSubscription, parse_subscription_userinfo
@@ -90,6 +91,22 @@ class BackupNodesRequest(BaseModel):
     nodes: str = Field(default="", max_length=512_000)
 
 
+class ConverterPreviewRequest(BaseModel):
+    kind: Literal[
+        "clash",
+        "surge",
+        "loon",
+        "quanx",
+        "surfboard",
+        "singbox",
+    ] = "clash"
+    params: dict[str, str] = Field(default_factory=dict)
+
+
+# 模板缓存键：缓存路径按 UUID 归一化，分享用的是 uuid4，不会撞上。
+UPSTREAM_PREVIEW_ID = "00000000-0000-0000-0000-000000000000"
+
+
 def _services(request: Request):
     return request.app.state.services
 
@@ -149,6 +166,43 @@ async def converter_diagnostics(request: Request):
     require_admin(request)
     services = _services(request)
     return await services.converter.diagnostics()
+
+
+@router.post("/converter/preview")
+async def converter_preview(payload: ConverterPreviewRequest, request: Request):
+    """用面板里配置的机场订阅源当场转换一份结果：不落分享记录、不下发 token。
+
+    上游源经回环内部通道取原始订阅，所以不需要先创建一个分享；转换预设与分享
+    链接完全一致（都是转换服务自己的 pref）。
+    """
+    require_admin(request, require_csrf=True)
+    services = _services(request)
+    settings = services.runtime_settings.get()
+    source_base = services.config.converter_source_base_url or settings.active_base_url()
+    if not source_base.startswith(("http://", "https://")):
+        raise HTTPException(400, "active base URL is required before converting")
+    raw_url = f"{source_base.rstrip('/')}/internal/raw"
+    try:
+        await services.refresher.refresh_if_stale(settings.refresh_interval_minutes * 60)
+    except Exception as exc:  # noqa: BLE001 - 刷新失败也要用上一次缓存把预览给出来
+        logger.warning("preview refresh failed: %s", type(exc).__name__)
+    state = services.db.runtime_state()
+    try:
+        body = await services.converter.render(
+            UPSTREAM_PREVIEW_ID,
+            raw_url,
+            payload.kind,
+            public_raw_url=raw_url,
+            source_digest=state["current_digest"] if state else None,
+            params=client_params(payload.params),
+        )
+    except RuntimeError as exc:
+        logger.warning("converter unavailable kind=%s", payload.kind)
+        raise HTTPException(503, "converter unavailable") from exc
+    return JSONResponse(
+        {"kind": payload.kind, "body": body},
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.get("/shares")

@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildShareRequest, kindLabel, paramChoices, paramsQuery, statusLabel, withParams } from '../src/shareView.js'
+import {
+  activeParams,
+  buildShareRequest,
+  downloadFilename,
+  kindLabel,
+  paramChoices,
+  paramsQuery,
+  shareDialogUrls,
+  statusLabel,
+  withParams,
+} from '../src/shareView.js'
 
 
 describe('share view helpers', () => {
@@ -22,6 +32,34 @@ describe('share view helpers', () => {
     expect(statusLabel({ revoked: true, expired: false })).toBe('已撤销')
     expect(statusLabel({ revoked: false, expired: true })).toBe('已过期')
     expect(statusLabel({ revoked: false, expired: false })).toBe('有效')
+  })
+
+  it('keeps the parameter object in sync with the query string', () => {
+    expect(activeParams({ emoji: '', udp: 'true', ver: ' 4 ' })).toEqual({ udp: 'true', ver: '4' })
+    expect(paramsQuery({ emoji: '', udp: 'true', ver: ' 4 ' })).toBe('udp=true&ver=4')
+    expect(activeParams(null)).toEqual({})
+  })
+
+  it('names downloads by target format', () => {
+    expect(downloadFilename('clash', 'upstream')).toBe('upstream-clash.yaml')
+    expect(downloadFilename('singbox')).toBe('clashsub-singbox.json')
+    expect(downloadFilename('surge')).toBe('clashsub-surge.conf')
+  })
+
+  it('maps a created share onto the link dialog fields', () => {
+    expect(
+      shareDialogUrls({ raw_url: 'r', clash_url: 'c', surge_url: 's', smart_url: 'm' }),
+    ).toEqual({
+      raw: 'r',
+      clash: 'c',
+      clashHa: '',
+      surge: 's',
+      loon: '',
+      quanx: '',
+      surfboard: '',
+      singbox: '',
+      smart: 'm',
+    })
   })
 
   it('keeps the parameter query in whitelist order and drops 默认 values', () => {

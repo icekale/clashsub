@@ -88,7 +88,7 @@ chmod 700 data
 docker compose up -d --build
 ```
 
-已发布镜像：`ghcr.io/icekale/clashsub:0.2.0`（`linux/amd64`）。
+已发布镜像：`ghcr.io/icekale/clashsub:0.2.1`（`linux/amd64`）。
 
 打开 `http://NAS_IP:18080/app/` 登录，在“设置”中把“局域网 Base URL”设为客户端
 实际可访问的地址（例如 `http://NAS_IP:18080`）。
@@ -122,6 +122,14 @@ Unraid 部署要点（appdata 目录、权限、命名卷）以及通过 Lucky �
 “概览”页的“转换服务”卡片显示容器内 SubConverter 的版本、提交与当日/累计的
 订阅请求数、规则转换数、失败与拒绝数（需上游开启 statistics）。转换服务无响应时
 仅提示该项，缓存健康状态不受影响。
+
+同一张卡片下方可以直接操作转换：选目标格式（Clash、Surge、Loon、Quantumult X、
+Surfboard、sing-box）与转换参数，点“预览转换结果”就地看输出，“下载”导出文件，
+“保存为订阅源并获取链接”会新建一条分享记录并弹出可复制的各格式链接。
+转换源固定用面板里配置的机场订阅源（上游源经容器内回环通道 `127.0.0.1:8080/internal/raw`
+取原始订阅，不需要先建分享），预设与分享链接一致；参数只作用于当次预览，
+分享链接的参数仍由客户端订阅地址里的查询串决定。Surge/Surfboard 预览里的
+`#!MANAGED-CONFIG` 指向内部地址，正式使用请以保存出来的分享链接为准。
 
 转换订阅由镜像内置的 SubConverter-Extended 生成，与主应用运行在同一个容器内
 （仅监听回环 `127.0.0.1:25500`），不需要外部在线服务。
