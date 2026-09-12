@@ -2,7 +2,8 @@
 
 面向 OpenClash/Mihomo 的订阅缓存与分享服务。它按需拉取并验证上游订阅，
 失败时继续提供最后一次有效缓存；支持带到期、撤销和轮换能力的独立分享链接，
-可输出 Raw / Clash / Surge / Loon 格式，并提供与 OpenClash 的自动联动
+可输出 Raw / Clash / Surge / Loon / Quantumult X / Surfboard / sing-box 格式，
+支持透传上游扩展参数，并提供与 OpenClash 的自动联动
 （刷新推送、节点健康检查、大面积故障自动重拉）。管理 WebUI 默认仅局域网可访问。
 
 ## 功能
@@ -11,7 +12,8 @@
   User-Agent 下载）与静态 URL 备用源；两者都失败时继续提供最后有效缓存。
 - **按需刷新**：客户端请求且缓存超过间隔时才刷新（默认 60 分钟，可配置），另有每日兜底。
 - **分享链接**：每条记录可独立设置有效期，支持撤销、轮换、续期，密钥只在创建时完整显示。
-- **多格式输出**：`/raw`、`/clash`、`/surge`、`/loon` 以及仅含健康节点的 `/clash-ha`。
+- **多格式输出**：`/raw`、`/clash`、`/surge`、`/loon`、`/quanx`、`/surfboard`、`/singbox`
+  以及仅含健康节点的 `/clash-ha`；均支持透传上游转换扩展参数。
 - **OpenClash 联动**：上游刷新成功后自动推送 provider 重拉；定期探测节点连通性；
   在线比例低于阈值时自动重新拉取上游缓存并再次推送。
 - **安全默认**：Secret 文件挂载、只读容器、最小权限、脱敏日志、公网模式默认关闭。
@@ -86,7 +88,7 @@ chmod 700 data
 docker compose up -d --build
 ```
 
-已发布镜像：`ghcr.io/icekale/clashsub:0.1.0`（`linux/amd64`）。
+已发布镜像：`ghcr.io/icekale/clashsub:0.2.0`（`linux/amd64`）。
 
 打开 `http://NAS_IP:18080/app/` 登录，在“设置”中把“局域网 Base URL”设为客户端
 实际可访问的地址（例如 `http://NAS_IP:18080`）。
@@ -108,7 +110,18 @@ Unraid 部署要点（appdata 目录、权限、命名卷）以及通过 Lucky �
 - `/raw/<token>`：原始订阅字节（OpenClash 直接使用）；
 - `/clash/<token>`：包含 `proxy-providers` 的 Mihomo/OpenClash 配置；
 - `/surge/<token>`、`/loon/<token>`：对应格式的转换订阅；
+- `/quanx/<token>`、`/surfboard/<token>`、`/singbox/<token>`：Quantumult X、Surfboard
+  与 sing-box 配置（sing-box 为上游的实验性输出，客户端兼容性随上游变化）；
 - `/clash-ha/<token>`：仅包含最近健康检查通过的节点的 Clash 配置。
+
+在链接后可以追加 SubConverter 的扩展参数，例如
+`/clash/<token>?tfo=true&udp=true&new_name=true&list=true&sort=false`。
+参数会与 token 一起参与缓存键，因此不同参数组各自缓存、互不覆盖；
+仅接受上游支持且无副作用的参数，未知参数会被忽略。
+
+“概览”页的“转换服务”卡片显示容器内 SubConverter 的版本、提交与当日/累计的
+订阅请求数、规则转换数、失败与拒绝数（需上游开启 statistics）。转换服务无响应时
+仅提示该项，缓存健康状态不受影响。
 
 转换订阅由镜像内置的 SubConverter-Extended 生成，与主应用运行在同一个容器内
 （仅监听回环 `127.0.0.1:25500`），不需要外部在线服务。
@@ -138,6 +151,12 @@ npm --prefix frontend test
 npm --prefix frontend run build
 docker compose config --quiet
 docker build -t clashsub:test .
+```
+
+想用真实的 SubConverter-Extended 容器验证转换链路（需 Docker，脚本自带https 存根源）：
+
+```bash
+.venv/bin/python scripts/e2e-converter.py
 ```
 
 ## 安全提醒
