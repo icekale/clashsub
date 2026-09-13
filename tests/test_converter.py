@@ -128,25 +128,37 @@ async def test_surge_and_loon_accept_general_and_a_proxy_entry(tmp_path, format)
     if format == "surge":
         assert rendered == "#!MANAGED-CONFIG https://sub.example/surge/token interval=3600\n" + payload
     else:
-        assert rendered.strip() == "Node = ss,example.test,443"
-        assert "[General]" not in rendered
+        assert rendered == payload
 
 
 @pytest.mark.asyncio
-async def test_loon_strips_clash_remote_rules(tmp_path):
+async def test_loon_explicit_list_param_accepts_node_list(tmp_path):
+    payload = "Node = ss,example.test,443,password=secret\n"
+    service = ConverterService(
+        CacheFiles(tmp_path),
+        "https://converter.example.test",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
+    )
+
+    rendered = await service.render(
+        "00000000-0000-0000-0000-000000000019",
+        "https://sub.example/raw/token",
+        "loon",
+        params={"list": "true"},
+    )
+
+    assert rendered == payload
+
+
+@pytest.mark.asyncio
+async def test_loon_keeps_full_config_and_node_fields(tmp_path):
     payload = (
         "[General]\nloglevel = notify\n"
-        'ssid-trigger="Ccccccc":DIRECT,"cellular":RULE,"default":RULE\n'
-        "doh-server=https://223.5.5.5/resolve\n"
-        "geoip-url=https://gitlab.com/example/Country.mmdb\n"
-        "resource-parser=https://gitlab.com/example/parser.js\n"
-        "[Proxy]\nNode = ss, example.test, 443\nHK = trojan,example.test,443,\"pw\",sni=example.test,tls-profile=compat,udp=true\n"
-        "[Rule]\nGEOSITE,youtube,PROXY\nGEOIP,cn,DIRECT\nGEOIP,telegram,PROXY\nFINAL,🐟 漏网之鱼\n"
-        "[Remote Rule]\n"
-        "https://cdn.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Proxy_Domain.mrs,PROXY\n"
-        "https://nav.example.test/rules/Custom_Direct_Domain.mrs,DIRECT\n"
-        "https://example.com/loon-rules.list,DIRECT\n"
-        "[MITM]\nca-p12=AAA\nhostname=example.com\n"
+        "[Proxy]\nNode = ss,example.test,443,\"ab, cd\",sni=example.test,tls-profile=compat\n"
+        "[Proxy Group]\nPROXY = select,Node\n"
+        "[Rule]\nFINAL,PROXY\n"
+        "[Remote Rule]\nhttps://rules.example/loon.list,PROXY\n"
+        "[MITM]\nhostname=example.com\n"
         "[Script]\ncron \"1 * * * *\" script-path=https://example.com/x.js\n"
     )
     service = ConverterService(
@@ -154,19 +166,14 @@ async def test_loon_strips_clash_remote_rules(tmp_path):
         "https://converter.example.test",
         transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
     )
+
     rendered = await service.render(
-        "00000000-0000-0000-0000-000000000018",
+        "00000000-0000-0000-0000-000000000020",
         "https://sub.example/raw/token",
         "loon",
-        public_raw_url="https://nav.example.test/raw/token",
     )
-    assert "[General]" not in rendered
-    assert "[Rule]" not in rendered
-    assert "jsdelivr" not in rendered
-    assert "tls-profile" not in rendered
-    assert "sni=" not in rendered
-    assert "Node = ss,example.test,443" in rendered
-    assert 'HK = trojan,example.test,443,"pw",tls-name=example.test,udp=true' in rendered
+
+    assert rendered == payload
 
 
 @pytest.mark.asyncio
@@ -219,6 +226,63 @@ async def test_surge_managed_header_uses_public_url_and_cache_hits(tmp_path):
     assert first.startswith("#!MANAGED-CONFIG https://sub.example.com/surge/secret interval=3600\n")
     assert second.startswith("#!MANAGED-CONFIG http://192.168.1.10:18080/surge/secret interval=3600\n")
     assert "http://clashsub:8080" not in first
+
+
+@pytest.mark.asyncio
+async def test_loon_refetches_legacy_list_cache_for_full_config(tmp_path):
+    cache = CacheFiles(tmp_path)
+    share_id = "00000000-0000-0000-0000-000000000021"
+    cache.write_converter_template(share_id, "Node = ss,legacy.example,443,password=old\n", "loon")
+    payload = "[General]\nloglevel = notify\n[Proxy]\nNode = ss,current.example,443,password=new\n"
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, text=payload)
+
+    service = ConverterService(
+        cache,
+        "https://converter.example.test",
+        transport=httpx.MockTransport(handler),
+    )
+
+    rendered = await service.render(share_id, "https://sub.example/raw/token", "loon")
+
+    assert rendered == payload
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_loon_explicit_list_param_rejects_full_config_cache(tmp_path):
+    cache = CacheFiles(tmp_path)
+    share_id = "00000000-0000-0000-0000-000000000022"
+    cache.write_converter_template(
+        share_id,
+        "[General]\nloglevel = notify\n[Proxy]\nNode = ss,legacy.example,443,password=old\n",
+        "loon",
+    )
+    payload = "Node = ss,current.example,443,password=new\n"
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, text=payload)
+
+    service = ConverterService(
+        cache,
+        "https://converter.example.test",
+        transport=httpx.MockTransport(handler),
+    )
+
+    rendered = await service.render(
+        share_id,
+        "https://sub.example/raw/token",
+        "loon",
+        params={"list": "true"},
+    )
+
+    assert rendered == payload
+    assert len(calls) == 1
 
 
 @pytest.mark.asyncio

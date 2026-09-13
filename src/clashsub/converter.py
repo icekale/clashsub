@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import re
@@ -75,7 +76,6 @@ RULE_URL_RE = re.compile(
     r"https://(?:cdn\.jsdelivr\.net|testingcf\.jsdelivr\.net)"
     r"/gh/Aethersailor/Custom_OpenClash_Rules@[^\s\"']+/rule/([A-Za-z0-9_.-]+)"
 )
-_LOON_NOTICE = ("大量节点超时", "更新需要在官网", "禁止使用")
 RULE_TTL = 86400
 RULE_UPSTREAMS = (
     "https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/",
@@ -168,6 +168,8 @@ def _surge_normalize_name(name: str) -> str:
 
 
 class ConverterService:
+    rule_transport: httpx.AsyncBaseTransport | None = None
+
     def __init__(
         self,
         cache: CacheFiles,
@@ -178,10 +180,14 @@ class ConverterService:
     ):
         self.cache, self.base_url, self.transport = cache, base_url.rstrip("/"), transport
         self.cache_ttl, self.max_bytes = cache_ttl, max_bytes
-        self.rule_transport = None
 
     def _validate_and_sanitize(
-        self, text: str, raw_url: str, format: str, surge_params: dict | None = None
+        self,
+        text: str,
+        raw_url: str,
+        format: str,
+        surge_params: dict | None = None,
+        loon_list: bool = False,
     ) -> str:
         if len(text.encode("utf-8")) > self.max_bytes:
             raise ValueError("converter response is too large")
@@ -204,7 +210,10 @@ class ConverterService:
                 text = "".join(
                     line for line in lines if not line.lstrip().startswith("#!MANAGED-CONFIG")
                 )
-            if not self._has_valid_proxy_section(text):
+            if format == "loon" and loon_list:
+                if not self._has_valid_loon_list(text):
+                    raise ValueError("converter response has no expected provider")
+            elif not self._has_valid_proxy_section(text):
                 raise ValueError("converter response has no expected provider")
             if format == "surge":
                 text = self._surge_compatible_proxies(text)
@@ -324,7 +333,8 @@ class ConverterService:
                 continue
             entry: dict[str, str] = {}
             if proxy.get("network") == "ws":
-                ws_opts = proxy.get("ws-opts") if isinstance(proxy.get("ws-opts"), dict) else {}
+                ws_opts_value = proxy.get("ws-opts")
+                ws_opts = ws_opts_value if isinstance(ws_opts_value, dict) else {}
                 path = self._surge_nested(ws_opts, "path")
                 if path:
                     entry["ws_path"] = str(path)
@@ -455,48 +465,23 @@ class ConverterService:
         return RULE_URL_RE.sub(lambda match: f"{rules_base}/{match.group(1)}", text)
 
     @staticmethod
-    def _ini_section(text: str, name: str) -> str:
-        header = f"[{name}]"
-        start = text.find(header)
-        if start < 0:
-            return ""
-        start += len(header)
-        if start < len(text) and text[start] == "\n":
-            start += 1
-        end = text.find("\n[", start)
-        return text[start:] if end < 0 else text[start:end]
-
-    @staticmethod
-    def _loon_proxy_line(line: str) -> str | None:
-        stripped = line.strip()
-        if "=" not in stripped or stripped.startswith("#"):
-            return None
-        name, rest = stripped.split("=", 1)
-        name = name.strip()
-        if not name or name.startswith(_LOON_NOTICE):
-            return None
-        parts: list[str] = []
-        for part in rest.split(","):
-            raw = part.strip()
-            if not raw:
+    def _has_valid_loon_list(text: str) -> bool:
+        """Loon 的 list 输出是 ``名称 = 类型,主机,端口,...`` 的节点行。"""
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith(("#", ";")) or "=" not in stripped:
                 continue
-            key = raw.split("=", 1)[0].strip().lower()
-            if key == "tls-profile":
+            _, value = stripped.split("=", 1)
+            fields = next(csv.reader([value], skipinitialspace=True), [])
+            if len(fields) < 3 or not all(field.strip() for field in fields[:3]):
                 continue
-            if key == "sni":
-                raw = "tls-name=" + raw.split("=", 1)[1].strip()
-            parts.append(raw)
-        return f"{name} = {','.join(parts)}"
-
-    @staticmethod
-    def _sanitize_loon(text: str) -> str:
-        # Loon 节点订阅只要节点列表；完整配置留给 App 自己的 配置/规则。
-        lines = [
-            converted
-            for line in ConverterService._ini_section(text, "Proxy").splitlines()
-            if (converted := ConverterService._loon_proxy_line(line))
-        ]
-        return "\n".join(lines) + "\n" if lines else text
+            try:
+                port = int(fields[2].strip())
+            except ValueError:
+                continue
+            if 1 <= port <= 65535:
+                return True
+        return False
 
     async def load_rule(self, name: str) -> bytes:
         if not RULE_NAME.fullmatch(name):
@@ -587,8 +572,6 @@ class ConverterService:
         text = self._restore_raw_url(template, output_raw_url, format)
         if format == "clash":
             return await self._inline_rule_providers(text)
-        if format == "loon":
-            return self._sanitize_loon(text)
         return text
 
     @staticmethod
@@ -624,11 +607,23 @@ class ConverterService:
         if format not in SUPPORTED_FORMATS:
             raise ValueError("unsupported converter format")
         output_raw_url = public_raw_url or raw_url
+        params = params or {}
+        loon_list = format == "loon" and params.get("list") == "true"
         key = params_key(params)
         template = None
         try:
             template = self.cache.read_converter_template(share_id, format, key)
-            if time.time() - self.cache.converter_mtime(share_id, format, key) <= self.cache_ttl:
+            if format == "loon":
+                template_is_valid = (
+                    self._has_valid_loon_list(template)
+                    if loon_list
+                    else self._has_valid_proxy_section(template)
+                )
+                if not template_is_valid:
+                    template = None
+            if template is not None and time.time() - self.cache.converter_mtime(
+                share_id, format, key
+            ) <= self.cache_ttl:
                 return self._finalize(
                     await self._restore_output(template, output_raw_url, format),
                     format,
@@ -644,13 +639,15 @@ class ConverterService:
             request_params = {"target": format, "url": raw_url, "expand": "false"}
             if format == "surge":
                 request_params["ver"] = "4"
-            request_params.update(params or {})
+            request_params.update(params)
             async with httpx.AsyncClient(
                 transport=self.transport, timeout=20, follow_redirects=True
             ) as client:
                 response = await client.get(f"{self.base_url}/sub", params=request_params)
             response.raise_for_status()
-            sanitized = self._validate_and_sanitize(response.text, raw_url, format, surge_params)
+            sanitized = self._validate_and_sanitize(
+                response.text, raw_url, format, surge_params, loon_list=loon_list
+            )
             self.cache.write_converter_template(share_id, sanitized, format, key)
             return self._finalize(
                 await self._restore_output(sanitized, output_raw_url, format),
