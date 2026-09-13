@@ -75,6 +75,10 @@ RULE_URL_RE = re.compile(
     r"https://(?:cdn\.jsdelivr\.net|testingcf\.jsdelivr\.net)"
     r"/gh/Aethersailor/Custom_OpenClash_Rules@[^\s\"']+/rule/([A-Za-z0-9_.-]+)"
 )
+CLASH_REMOTE_RULE = re.compile(
+    r"(?:cdn\.jsdelivr\.net|testingcf\.jsdelivr\.net)/gh/Aethersailor/Custom_OpenClash_Rules"
+    r"|/rules/[A-Za-z0-9_.-]+\.(?:mrs|yaml)\b"
+)
 RULE_TTL = 86400
 RULE_UPSTREAMS = (
     "https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/",
@@ -442,14 +446,22 @@ class ConverterService:
         return ""
 
     @staticmethod
-    def _restore_raw_url(template: str, raw_url: str) -> str:
+    def _restore_raw_url(template: str, raw_url: str, format: str = "clash") -> str:
         text = template.replace(RAW_URL_ENCODED_PLACEHOLDER, quote(raw_url, safe="")).replace(
             RAW_URL_PLACEHOLDER, raw_url
         )
+        if format != "clash":
+            return text
         rules_base = ConverterService._rules_base(raw_url)
         if not rules_base:
             return text
         return RULE_URL_RE.sub(lambda match: f"{rules_base}/{match.group(1)}", text)
+
+    @staticmethod
+    def _strip_clash_remote_rules(text: str) -> str:
+        return "".join(
+            line for line in text.splitlines(keepends=True) if not CLASH_REMOTE_RULE.search(line)
+        )
 
     async def load_rule(self, name: str) -> bytes:
         if not RULE_NAME.fullmatch(name):
@@ -537,9 +549,11 @@ class ConverterService:
         return text[: match.start()] + text[match.end() :]
 
     async def _restore_output(self, template: str, output_raw_url: str, format: str) -> str:
-        text = self._restore_raw_url(template, output_raw_url)
+        text = self._restore_raw_url(template, output_raw_url, format)
         if format == "clash":
             return await self._inline_rule_providers(text)
+        if format == "loon":
+            return self._strip_clash_remote_rules(text)
         return text
 
     @staticmethod

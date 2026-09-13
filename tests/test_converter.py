@@ -132,6 +132,34 @@ async def test_surge_and_loon_accept_general_and_a_proxy_entry(tmp_path, format)
 
 
 @pytest.mark.asyncio
+async def test_loon_strips_clash_remote_rules(tmp_path):
+    payload = (
+        "[General]\nloglevel = notify\n"
+        "[Proxy]\nNode = ss, example.test, 443\n"
+        "[Rule]\nGEOIP,CN,DIRECT\nFINAL,Proxy\n"
+        "[Remote Rule]\n"
+        "https://cdn.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Proxy_Domain.mrs,PROXY\n"
+        "https://nav.example.test/rules/Custom_Direct_Domain.mrs,DIRECT\n"
+        "https://example.com/loon-rules.list,DIRECT\n"
+    )
+    service = ConverterService(
+        CacheFiles(tmp_path),
+        "https://converter.example.test",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
+    )
+    rendered = await service.render(
+        "00000000-0000-0000-0000-000000000018",
+        "https://sub.example/raw/token",
+        "loon",
+        public_raw_url="https://nav.example.test/raw/token",
+    )
+    assert "jsdelivr" not in rendered
+    assert "/rules/" not in rendered
+    assert "https://example.com/loon-rules.list,DIRECT" in rendered
+    assert "GEOIP,CN,DIRECT" in rendered
+
+
+@pytest.mark.asyncio
 async def test_surge_removes_managed_header_and_encoded_token_from_cache(tmp_path):
     raw_url = "http://clashsub:8080/raw/plain-secret"
     payload = (
