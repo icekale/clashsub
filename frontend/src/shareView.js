@@ -48,6 +48,7 @@ export const CONVERT_PARAMS = [
   { key: 'new_name', label: 'Clash 新字段名', hint: 'Mihomo 路径强制使用新字段' },
   { key: 'append_type', label: '名称追加类型', hint: '节点名后追加协议类型' },
   { key: 'ver', label: 'Surge 版本', hint: '仅 Surge 输出生效', choices: ['2', '3', '4'] },
+  { key: 'expand', label: '展开规则', hint: '关=用 rule-providers 规则集（OpenClash 建议关）' },
 ]
 
 const DEFAULT_CHOICES = [

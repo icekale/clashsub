@@ -88,7 +88,7 @@ chmod 700 data
 docker compose up -d --build
 ```
 
-已发布镜像：`ghcr.io/icekale/clashsub:0.2.2`（`linux/amd64`）。
+已发布镜像：`ghcr.io/icekale/clashsub:0.2.3`（`linux/amd64`）。
 
 打开 `http://NAS_IP:18080/app/` 登录，在“设置”中把“局域网 Base URL”设为客户端
 实际可访问的地址（例如 `http://NAS_IP:18080`）。
@@ -119,6 +119,15 @@ Unraid 部署要点（appdata 目录、权限、命名卷）以及通过 Lucky �
 `template` 只接受服务端枚举的 Aethersailor 规则模板（标准/轻量/GFW/重度分流，
 以及各自的故障转移变体）；默认即标准版。参数会与 token 一起参与缓存键，
 因此不同参数组各自缓存、互不覆盖；未知参数会被忽略。
+
+OpenClash 用户注意：OpenClash 的“使用规则集（rule_provider）”开关只在它自己
+调用上游转换接口时才发送 `expand=false`。若把订阅地址直接指向 `/clash/<token>`
+并关闭 OpenClash 的订阅转换，必须自己带上 `expand=false`，否则规则会被展开成
+内联 `GEOSITE`/`GEOIP` 而不是 `rule-providers`：
+
+```
+https://<你的域名>/clash/<token>?template=full&expand=false
+```
 
 “概览”页的“转换服务”卡片显示容器内 SubConverter 的版本、提交与当日/累计的
 订阅请求数、规则转换数、失败与拒绝数（需上游开启 statistics）。转换服务无响应时

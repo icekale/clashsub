@@ -39,6 +39,9 @@ BOOLEAN_PARAMS = (
     "scv",
     "new_name",
     "append_type",
+    # expand=false 让 subconverter 保留 rule-providers/RULE-SET 而不展开成内联规则
+    # （OpenClash 的 rule_provider 开关就是发这个）。默认仍为 true，见 render()。
+    "expand",
 )
 BOOLEAN_VALUES = {
     "true": "true",

@@ -116,6 +116,23 @@ async def test_client_parameters_reach_upstream_and_split_the_cache(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_expand_false_reaches_upstream_rule_providers(tmp_path):
+    """expand=false 是 OpenClash rule_provider 开关；白名单要放行它并覆盖默认的 true。"""
+    seen = []
+    service = ConverterService(
+        CacheFiles(tmp_path),
+        "https://converter.example.test",
+        httpx.MockTransport(lambda request: _handler(request, seen)),
+    )
+    params = client_params({"expand": "false", "config": "/etc/passwd"})
+    assert params == {"expand": "false"}
+
+    await service.render("00000000-0000-0000-0000-000000000004",
+                         "https://sub.example.test/raw/token", "clash", params=params)
+    assert seen[0]["params"]["expand"] == "false"
+
+
+@pytest.mark.asyncio
 async def test_template_alias_becomes_config_and_drops_raw_config(tmp_path):
     """template 是我们的别名；config 永远不从客户端直通。"""
     seen = []
