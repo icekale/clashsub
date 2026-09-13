@@ -37,6 +37,32 @@ def parse_backup_nodes(text: str, max_bytes: int = 8 * 1024 * 1024) -> Validated
     return validate_subscription(text.encode("utf-8"), max_bytes)
 
 
+def merge_backup_payload(airport: bytes, backup: bytes) -> bytes:
+    extras = backup_proxies(backup)
+    if not extras:
+        return airport
+    try:
+        document = yaml.safe_load(airport)
+    except yaml.YAMLError:
+        document = None
+    if isinstance(document, dict) and isinstance(document.get("proxies"), list):
+        have = {proxy.get("name") for proxy in document["proxies"] if isinstance(proxy, dict)}
+        prepend = [proxy for proxy in extras if proxy.get("name") not in have]
+        if not prepend:
+            return airport
+        document["proxies"] = prepend + document["proxies"]
+        return yaml.safe_dump(document, allow_unicode=True, sort_keys=False).encode("utf-8")
+    backup_lines = [
+        line.strip()
+        for line in backup.decode("utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#") and "://" in line.strip()
+    ]
+    added = [line for line in backup_lines if line not in airport.decode("utf-8")]
+    if not added:
+        return airport
+    return ("\n".join(added) + "\n").encode("utf-8") + airport
+
+
 def backup_proxies(payload: bytes) -> list[dict]:
     text = payload.decode("utf-8")
     try:
@@ -119,7 +145,13 @@ class BackupNodes:
         digest = self.db.runtime_state()["current_digest"]
         if not digest:
             raise FileNotFoundError("subscription cache unavailable")
-        return self.cache.read_raw(digest)
+        airport = self.cache.read_raw(digest)
+        backup = self.snapshot()
+        if backup is None:
+            return airport
+        return RawSnapshot(
+            merge_backup_payload(airport.payload, backup.payload), airport.safe_headers
+        )
 
     def status(self) -> dict:
         available = self.store.available

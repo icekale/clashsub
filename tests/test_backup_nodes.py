@@ -270,9 +270,31 @@ def test_raw_stays_on_airport_before_threshold(client):
     services.backup_nodes.save(BACKUP)
     services.db.record_refresh_failure("all_sources_failed", 200)
     response = client.get(f"/raw/{token}")
-    assert response.content.startswith(b"trojan://air@")
+    assert b"trojan://air@" in response.content
+    assert b"trojan://bak@" in response.content
     assert response.headers["subscription-userinfo"] == "upload=1"
     assert services.db.runtime_state()["current_digest"] == digest
+
+
+def test_raw_merges_yaml_backup_before_threshold(client):
+    services = client.app.state.services
+    token = _token(client)
+    airport = (
+        b"proxies:\n"
+        b"- name: air\n"
+        b"  type: trojan\n"
+        b"  server: air.example\n"
+        b"  port: 443\n"
+    )
+    digest = services.cache.publish_raw(airport, {})
+    services.db.record_refresh_success(digest, 1, "yaml", {}, 100, "fallback")
+    services.backup_nodes.save(
+        "proxies:\n- name: bak\n  type: vless\n  server: bak.example\n  port: 2053\n"
+    )
+    text = client.get(f"/raw/{token}").text
+    assert "name: bak" in text
+    assert "name: air" in text
+    assert text.index("name: bak") < text.index("name: air")
 
 
 def test_raw_serves_backup_at_threshold_and_keeps_digest(client):
@@ -284,6 +306,7 @@ def test_raw_serves_backup_at_threshold_and_keeps_digest(client):
         services.db.record_refresh_failure("all_sources_failed", 200 + i)
     response = client.get(f"/raw/{token}")
     assert b"trojan://bak@" in response.content
+    assert b"trojan://air@" not in response.content
     assert "subscription-userinfo" not in response.headers
     assert response.headers["profile-update-interval"]
     assert services.db.runtime_state()["current_digest"] == digest
@@ -301,7 +324,8 @@ def test_raw_returns_to_airport_after_success(client):
         digest, 1, "uri-list", {"subscription-userinfo": "upload=1"}, 300, "fallback"
     )
     response = client.get(f"/raw/{token}")
-    assert response.content.startswith(b"trojan://air@")
+    assert b"trojan://air@" in response.content
+    assert b"trojan://bak@" in response.content
     assert services.db.runtime_state()["current_digest"] == digest
 
 
