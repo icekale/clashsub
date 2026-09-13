@@ -467,35 +467,36 @@ class ConverterService:
         return text[start:] if end < 0 else text[start:end]
 
     @staticmethod
+    def _loon_proxy_line(line: str) -> str | None:
+        stripped = line.strip()
+        if "=" not in stripped or stripped.startswith("#"):
+            return None
+        name, rest = stripped.split("=", 1)
+        name = name.strip()
+        if not name or name.startswith(_LOON_NOTICE):
+            return None
+        parts: list[str] = []
+        for part in rest.split(","):
+            raw = part.strip()
+            if not raw:
+                continue
+            key = raw.split("=", 1)[0].strip().lower()
+            if key == "tls-profile":
+                continue
+            if key == "sni":
+                raw = "tls-name=" + raw.split("=", 1)[1].strip()
+            parts.append(raw)
+        return f"{name} = {','.join(parts)}"
+
+    @staticmethod
     def _sanitize_loon(text: str) -> str:
-        # OpenClash 模板转 Loon 会留下 GEOSITE/国内 DoH/MITM/93 节点 url-test，手机测通但上不了网。
-        names: list[str] = []
-        lines: list[str] = []
-        for line in ConverterService._ini_section(text, "Proxy").splitlines():
-            if "=" not in line or line.lstrip().startswith("#"):
-                continue
-            name = line.split("=", 1)[0].strip()
-            if not name or name.startswith(_LOON_NOTICE):
-                continue
-            names.append(name)
-            lines.append(line.rstrip())
-        if not names:
-            return text
-        group = ",".join(names)
-        return (
-            "[General]\n"
-            "skip-proxy = 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, localhost, *.local, captive.apple.com\n"
-            "bypass-tun = 10.0.0.0/8, 127.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16\n"
-            "dns-server = system\n"
-            "hijack-dns = *:53\n"
-            "ipv6 = false\n"
-            "\n[Proxy]\n"
-            + "\n".join(lines)
-            + "\n\n[Proxy Group]\n"
-            f"PROXY = url-test,{group},url = http://www.gstatic.com/generate_204,interval = 300\n"
-            "\n[Rule]\n"
-            "FINAL,PROXY\n"
-        )
+        # Loon 节点订阅只要节点列表；完整配置留给 App 自己的 配置/规则。
+        lines = [
+            converted
+            for line in ConverterService._ini_section(text, "Proxy").splitlines()
+            if (converted := ConverterService._loon_proxy_line(line))
+        ]
+        return "\n".join(lines) + "\n" if lines else text
 
     async def load_rule(self, name: str) -> bytes:
         if not RULE_NAME.fullmatch(name):

@@ -128,10 +128,8 @@ async def test_surge_and_loon_accept_general_and_a_proxy_entry(tmp_path, format)
     if format == "surge":
         assert rendered == "#!MANAGED-CONFIG https://sub.example/surge/token interval=3600\n" + payload
     else:
-        assert "Node = ss, example.test, 443" in rendered
-        assert "hijack-dns" in rendered
-        assert "FINAL,PROXY" in rendered
-        assert "dns-server = system" in rendered
+        assert rendered.strip() == "Node = ss,example.test,443"
+        assert "[General]" not in rendered
 
 
 @pytest.mark.asyncio
@@ -142,7 +140,7 @@ async def test_loon_strips_clash_remote_rules(tmp_path):
         "doh-server=https://223.5.5.5/resolve\n"
         "geoip-url=https://gitlab.com/example/Country.mmdb\n"
         "resource-parser=https://gitlab.com/example/parser.js\n"
-        "[Proxy]\nNode = ss, example.test, 443\n"
+        "[Proxy]\nNode = ss, example.test, 443\nHK = trojan,example.test,443,\"pw\",sni=example.test,tls-profile=compat,udp=true\n"
         "[Rule]\nGEOSITE,youtube,PROXY\nGEOIP,cn,DIRECT\nGEOIP,telegram,PROXY\nFINAL,🐟 漏网之鱼\n"
         "[Remote Rule]\n"
         "https://cdn.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Proxy_Domain.mrs,PROXY\n"
@@ -162,21 +160,13 @@ async def test_loon_strips_clash_remote_rules(tmp_path):
         "loon",
         public_raw_url="https://nav.example.test/raw/token",
     )
+    assert "[General]" not in rendered
+    assert "[Rule]" not in rendered
     assert "jsdelivr" not in rendered
-    assert "/rules/" not in rendered
-    assert "ssid-trigger" not in rendered
-    assert "GEOSITE" not in rendered
-    assert "GEOIP" not in rendered
-    assert "漏网之鱼" not in rendered
-    assert "doh-server" not in rendered
-    assert "ca-p12" not in rendered
-    assert "[MITM]" not in rendered
-    assert "[Script]" not in rendered
-    assert "Node = ss, example.test, 443" in rendered
-    assert "FINAL,PROXY" in rendered
-    assert "PROXY = url-test,Node," in rendered
-    assert "hijack-dns" in rendered
-    assert "dns-server = system" in rendered
+    assert "tls-profile" not in rendered
+    assert "sni=" not in rendered
+    assert "Node = ss,example.test,443" in rendered
+    assert 'HK = trojan,example.test,443,"pw",tls-name=example.test,udp=true' in rendered
 
 
 @pytest.mark.asyncio
