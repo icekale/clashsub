@@ -128,9 +128,10 @@ async def test_surge_and_loon_accept_general_and_a_proxy_entry(tmp_path, format)
     if format == "surge":
         assert rendered == "#!MANAGED-CONFIG https://sub.example/surge/token interval=3600\n" + payload
     else:
-        assert "loglevel = notify" in rendered
         assert "Node = ss, example.test, 443" in rendered
-        assert "hijack-dns=*:53" in rendered
+        assert "hijack-dns" in rendered
+        assert "FINAL,PROXY" in rendered
+        assert "dns-server = system" in rendered
 
 
 @pytest.mark.asyncio
@@ -165,18 +166,17 @@ async def test_loon_strips_clash_remote_rules(tmp_path):
     assert "/rules/" not in rendered
     assert "ssid-trigger" not in rendered
     assert "GEOSITE" not in rendered
-    assert "GEOIP,cn,DIRECT" not in rendered
-    assert "GEOIP,telegram,PROXY" in rendered
-    assert "https://example.com/loon-rules.list,DIRECT" in rendered
-    assert "FINAL,♻️ 自动选择" in rendered
+    assert "GEOIP" not in rendered
     assert "漏网之鱼" not in rendered
-    assert "hijack-dns=*:53" in rendered
     assert "doh-server" not in rendered
-    assert "geoip-url" not in rendered
-    assert "resource-parser" not in rendered
     assert "ca-p12" not in rendered
     assert "[MITM]" not in rendered
     assert "[Script]" not in rendered
+    assert "Node = ss, example.test, 443" in rendered
+    assert "FINAL,PROXY" in rendered
+    assert "PROXY = url-test,Node," in rendered
+    assert "hijack-dns" in rendered
+    assert "dns-server = system" in rendered
 
 
 @pytest.mark.asyncio

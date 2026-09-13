@@ -75,15 +75,7 @@ RULE_URL_RE = re.compile(
     r"https://(?:cdn\.jsdelivr\.net|testingcf\.jsdelivr\.net)"
     r"/gh/Aethersailor/Custom_OpenClash_Rules@[^\s\"']+/rule/([A-Za-z0-9_.-]+)"
 )
-CLASH_REMOTE_RULE = re.compile(
-    r"(?:cdn\.jsdelivr\.net|testingcf\.jsdelivr\.net)/gh/Aethersailor/Custom_OpenClash_Rules"
-    r"|/rules/[A-Za-z0-9_.-]+\.(?:mrs|yaml)\b"
-)
-# Loon 不认 Clash GEOSITE；国内 DNS 污染后 GEOIP,cn 会把被墙域名直连。
-_LOON_DROP = re.compile(r"(?i)^(?:ssid-trigger\s*=|GEOSITE,|GEOIP,\s*cn,)")
-_LOON_DROP_SECTIONS = frozenset({"MITM", "Script", "Rewrite", "Host"})
-_LOON_DROP_GENERAL = re.compile(r"(?i)^(doh-server|geoip-url|resource-parser)\s*=")
-_LOON_FINAL = re.compile(r"(?i)^FINAL,\s*🐟 漏网之鱼")
+_LOON_NOTICE = ("大量节点超时", "更新需要在官网", "禁止使用")
 RULE_TTL = 86400
 RULE_UPSTREAMS = (
     "https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/",
@@ -463,39 +455,47 @@ class ConverterService:
         return RULE_URL_RE.sub(lambda match: f"{rules_base}/{match.group(1)}", text)
 
     @staticmethod
+    def _ini_section(text: str, name: str) -> str:
+        header = f"[{name}]"
+        start = text.find(header)
+        if start < 0:
+            return ""
+        start += len(header)
+        if start < len(text) and text[start] == "\n":
+            start += 1
+        end = text.find("\n[", start)
+        return text[start:] if end < 0 else text[start:end]
+
+    @staticmethod
     def _sanitize_loon(text: str) -> str:
-        out: list[str] = []
-        skip = False
-        in_general = False
-        has_hijack = False
-        for line in text.splitlines(keepends=True):
-            header = line.strip()
-            if header.startswith("[") and header.endswith("]"):
-                name = header[1:-1].strip()
-                skip = name in _LOON_DROP_SECTIONS
-                in_general = name == "General"
-                if skip:
-                    continue
-                out.append(line)
+        # OpenClash 模板转 Loon 会留下 GEOSITE/国内 DoH/MITM/93 节点 url-test，手机测通但上不了网。
+        names: list[str] = []
+        lines: list[str] = []
+        for line in ConverterService._ini_section(text, "Proxy").splitlines():
+            if "=" not in line or line.lstrip().startswith("#"):
                 continue
-            if skip:
+            name = line.split("=", 1)[0].strip()
+            if not name or name.startswith(_LOON_NOTICE):
                 continue
-            stripped = line.lstrip()
-            if CLASH_REMOTE_RULE.search(line) or _LOON_DROP.match(stripped):
-                continue
-            if in_general:
-                if _LOON_DROP_GENERAL.match(stripped):
-                    continue
-                if stripped.lower().startswith("hijack-dns"):
-                    has_hijack = True
-            if _LOON_FINAL.match(stripped):
-                out.append("FINAL,♻️ 自动选择\n" if line.endswith("\n") else "FINAL,♻️ 自动选择")
-                continue
-            out.append(line)
-        result = "".join(out)
-        if not has_hijack:
-            result = result.replace("[General]\n", "[General]\nhijack-dns=*:53\n", 1)
-        return result
+            names.append(name)
+            lines.append(line.rstrip())
+        if not names:
+            return text
+        group = ",".join(names)
+        return (
+            "[General]\n"
+            "skip-proxy = 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, localhost, *.local, captive.apple.com\n"
+            "bypass-tun = 10.0.0.0/8, 127.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16\n"
+            "dns-server = system\n"
+            "hijack-dns = *:53\n"
+            "ipv6 = false\n"
+            "\n[Proxy]\n"
+            + "\n".join(lines)
+            + "\n\n[Proxy Group]\n"
+            f"PROXY = url-test,{group},url = http://www.gstatic.com/generate_204,interval = 300\n"
+            "\n[Rule]\n"
+            "FINAL,PROXY\n"
+        )
 
     async def load_rule(self, name: str) -> bytes:
         if not RULE_NAME.fullmatch(name):
