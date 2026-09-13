@@ -420,29 +420,44 @@ async def test_surge_output_keeps_complete_config_sections(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_clash_rule_providers_point_at_local_rules(tmp_path):
+async def test_clash_rule_providers_are_inlined(tmp_path):
     payload = VALID + (
         "rule-providers:\n"
         "  Custom_Proxy_Domain:\n"
         "    type: http\n"
+        "    behavior: domain\n"
         "    url: https://cdn.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Proxy_Domain.mrs\n"
-        "  Custom_Direct_Domain:\n"
+        "  Missing_Provider:\n"
         "    type: http\n"
-        '    url: "https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Direct_Domain.mrs"\n'
+        "    url: https://cdn.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Missing_Provider.yaml\n"
+        "rules:\n"
+        "  - RULE-SET,Custom_Proxy_Domain,PROXY\n"
+        "  - RULE-SET,Missing_Provider,DIRECT\n"
+        "  - MATCH,PROXY\n"
     )
+
+    def rules(request):
+        if str(request.url).endswith("Custom_Proxy_Domain.yaml"):
+            return httpx.Response(200, text="payload:\n  - +.example.com\n")
+        return httpx.Response(404)
+
     service = ConverterService(
         CacheFiles(tmp_path),
         "https://api.asailor.org",
         transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
     )
+    service.rule_transport = httpx.MockTransport(rules)
     result = await service.render(
         "00000000-0000-0000-0000-000000000018",
         "https://sub.example.com/raw/plain-secret",
         public_raw_url="https://nav.example.test:8096/raw/plain-secret",
     )
     assert "jsdelivr.net" not in result
-    assert "https://nav.example.test:8096/rules/Custom_Proxy_Domain.mrs" in result
-    assert "https://nav.example.test:8096/rules/Custom_Direct_Domain.mrs" in result
+    assert "/rules/" not in result
+    assert "type: inline" in result
+    assert "+.example.com" in result
+    assert "RULE-SET,Custom_Proxy_Domain,PROXY" in result
+    assert "RULE-SET,Missing_Provider" not in result
     stored = (
         tmp_path / "converted" / "00000000-0000-0000-0000-000000000018.yaml"
     ).read_text(encoding="utf-8")

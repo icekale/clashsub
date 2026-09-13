@@ -80,6 +80,17 @@ RULE_UPSTREAMS = (
     "https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/",
     "https://cdn.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/",
 )
+RULE_PROVIDERS_BLOCK = re.compile(r"(?m)^rule-providers:\n(?:[ \t].*\n|\n)*")
+
+
+def _dropped_ruleset(line: str, dropped: set[str]) -> bool:
+    stripped = line.lstrip()
+    if stripped.startswith("- "):
+        stripped = stripped[2:].lstrip()
+    if not stripped.upper().startswith("RULE-SET,"):
+        return False
+    parts = stripped.split(",")
+    return len(parts) > 1 and parts[1].strip() in dropped
 
 
 def client_params(query) -> dict[str, str]:
@@ -470,6 +481,68 @@ class ConverterService:
             raise FileNotFoundError(name) from (last_error or exc)
 
     @staticmethod
+    def _rule_payload(data: bytes):
+        document = yaml.safe_load(data)
+        if isinstance(document, dict) and isinstance(document.get("payload"), list):
+            return document["payload"]
+        if isinstance(document, list):
+            return document
+        return None
+
+    async def _inline_rule_providers(self, text: str) -> str:
+        match = RULE_PROVIDERS_BLOCK.search(text)
+        if not match:
+            return text
+        loaded = yaml.safe_load(match.group(0))
+        providers = loaded.get("rule-providers") if isinstance(loaded, dict) else None
+        if not isinstance(providers, dict) or not providers:
+            return text
+        dropped: set[str] = set()
+        changed = False
+        for name, provider in list(providers.items()):
+            if not isinstance(provider, dict):
+                continue
+            url = str(provider.get("url") or "")
+            if "/rules/" not in url and "Custom_OpenClash_Rules" not in url:
+                continue
+            filename = url.rsplit("/", 1)[-1]
+            source = filename[:-4] + ".yaml" if filename.endswith(".mrs") else filename
+            try:
+                payload = self._rule_payload(await self.load_rule(source))
+            except (ValueError, FileNotFoundError, yaml.YAMLError):
+                payload = None
+            if not payload:
+                dropped.add(name)
+                providers.pop(name, None)
+                changed = True
+                continue
+            providers[name] = {
+                "type": "inline",
+                "behavior": provider.get("behavior") or "classical",
+                "payload": payload,
+            }
+            changed = True
+        if not changed:
+            return text
+        if dropped:
+            text = "".join(
+                line for line in text.splitlines(keepends=True) if not _dropped_ruleset(line, dropped)
+            )
+            match = RULE_PROVIDERS_BLOCK.search(text)
+            if not match:
+                return text
+        if providers:
+            block = yaml.safe_dump({"rule-providers": providers}, allow_unicode=True, sort_keys=False)
+            return text[: match.start()] + block.rstrip() + "\n" + text[match.end() :]
+        return text[: match.start()] + text[match.end() :]
+
+    async def _restore_output(self, template: str, output_raw_url: str, format: str) -> str:
+        text = self._restore_raw_url(template, output_raw_url)
+        if format == "clash":
+            return await self._inline_rule_providers(text)
+        return text
+
+    @staticmethod
     def _managed_header(format: str, output_raw_url: str, params: dict[str, str] | None = None) -> str:
         """Managed-config header so Surge/Surfboard offer automatic or manual updates."""
         if "/raw/" in output_raw_url:
@@ -508,7 +581,10 @@ class ConverterService:
             template = self.cache.read_converter_template(share_id, format, key)
             if time.time() - self.cache.converter_mtime(share_id, format, key) <= self.cache_ttl:
                 return self._finalize(
-                    self._restore_raw_url(template, output_raw_url), format, output_raw_url, params
+                    await self._restore_output(template, output_raw_url, format),
+                    format,
+                    output_raw_url,
+                    params,
                 )
         except OSError:
             template = None
@@ -528,12 +604,18 @@ class ConverterService:
             sanitized = self._validate_and_sanitize(response.text, raw_url, format, surge_params)
             self.cache.write_converter_template(share_id, sanitized, format, key)
             return self._finalize(
-                self._restore_raw_url(sanitized, output_raw_url), format, output_raw_url, params
+                await self._restore_output(sanitized, output_raw_url, format),
+                format,
+                output_raw_url,
+                params,
             )
         except (httpx.HTTPError, ValueError, json.JSONDecodeError, yaml.YAMLError, OSError) as exc:
             if template is not None:
                 return self._finalize(
-                    self._restore_raw_url(template, output_raw_url), format, output_raw_url, params
+                    await self._restore_output(template, output_raw_url, format),
+                    format,
+                    output_raw_url,
+                    params,
                 )
             raise RuntimeError("converter unavailable") from exc
 
