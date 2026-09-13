@@ -81,6 +81,9 @@ CLASH_REMOTE_RULE = re.compile(
 )
 # Loon 不认 Clash GEOSITE；国内 DNS 污染后 GEOIP,cn 会把被墙域名直连。
 _LOON_DROP = re.compile(r"(?i)^(?:ssid-trigger\s*=|GEOSITE,|GEOIP,\s*cn,)")
+_LOON_DROP_SECTIONS = frozenset({"MITM", "Script", "Rewrite", "Host"})
+_LOON_DROP_GENERAL = re.compile(r"(?i)^(doh-server|geoip-url|resource-parser)\s*=")
+_LOON_FINAL = re.compile(r"(?i)^FINAL,\s*🐟 漏网之鱼")
 RULE_TTL = 86400
 RULE_UPSTREAMS = (
     "https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/",
@@ -461,11 +464,38 @@ class ConverterService:
 
     @staticmethod
     def _sanitize_loon(text: str) -> str:
-        return "".join(
-            line
-            for line in text.splitlines(keepends=True)
-            if not CLASH_REMOTE_RULE.search(line) and not _LOON_DROP.match(line.lstrip())
-        )
+        out: list[str] = []
+        skip = False
+        in_general = False
+        has_hijack = False
+        for line in text.splitlines(keepends=True):
+            header = line.strip()
+            if header.startswith("[") and header.endswith("]"):
+                name = header[1:-1].strip()
+                skip = name in _LOON_DROP_SECTIONS
+                in_general = name == "General"
+                if skip:
+                    continue
+                out.append(line)
+                continue
+            if skip:
+                continue
+            stripped = line.lstrip()
+            if CLASH_REMOTE_RULE.search(line) or _LOON_DROP.match(stripped):
+                continue
+            if in_general:
+                if _LOON_DROP_GENERAL.match(stripped):
+                    continue
+                if stripped.lower().startswith("hijack-dns"):
+                    has_hijack = True
+            if _LOON_FINAL.match(stripped):
+                out.append("FINAL,♻️ 自动选择\n" if line.endswith("\n") else "FINAL,♻️ 自动选择")
+                continue
+            out.append(line)
+        result = "".join(out)
+        if not has_hijack:
+            result = result.replace("[General]\n", "[General]\nhijack-dns=*:53\n", 1)
+        return result
 
     async def load_rule(self, name: str) -> bytes:
         if not RULE_NAME.fullmatch(name):

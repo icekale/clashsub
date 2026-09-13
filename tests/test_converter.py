@@ -128,7 +128,9 @@ async def test_surge_and_loon_accept_general_and_a_proxy_entry(tmp_path, format)
     if format == "surge":
         assert rendered == "#!MANAGED-CONFIG https://sub.example/surge/token interval=3600\n" + payload
     else:
-        assert rendered == payload
+        assert "loglevel = notify" in rendered
+        assert "Node = ss, example.test, 443" in rendered
+        assert "hijack-dns=*:53" in rendered
 
 
 @pytest.mark.asyncio
@@ -136,12 +138,17 @@ async def test_loon_strips_clash_remote_rules(tmp_path):
     payload = (
         "[General]\nloglevel = notify\n"
         'ssid-trigger="Ccccccc":DIRECT,"cellular":RULE,"default":RULE\n'
+        "doh-server=https://223.5.5.5/resolve\n"
+        "geoip-url=https://gitlab.com/example/Country.mmdb\n"
+        "resource-parser=https://gitlab.com/example/parser.js\n"
         "[Proxy]\nNode = ss, example.test, 443\n"
-        "[Rule]\nGEOSITE,youtube,PROXY\nGEOIP,cn,DIRECT\nGEOIP,telegram,PROXY\nFINAL,Proxy\n"
+        "[Rule]\nGEOSITE,youtube,PROXY\nGEOIP,cn,DIRECT\nGEOIP,telegram,PROXY\nFINAL,🐟 漏网之鱼\n"
         "[Remote Rule]\n"
         "https://cdn.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Proxy_Domain.mrs,PROXY\n"
         "https://nav.example.test/rules/Custom_Direct_Domain.mrs,DIRECT\n"
         "https://example.com/loon-rules.list,DIRECT\n"
+        "[MITM]\nca-p12=AAA\nhostname=example.com\n"
+        "[Script]\ncron \"1 * * * *\" script-path=https://example.com/x.js\n"
     )
     service = ConverterService(
         CacheFiles(tmp_path),
@@ -161,7 +168,15 @@ async def test_loon_strips_clash_remote_rules(tmp_path):
     assert "GEOIP,cn,DIRECT" not in rendered
     assert "GEOIP,telegram,PROXY" in rendered
     assert "https://example.com/loon-rules.list,DIRECT" in rendered
-    assert "FINAL,Proxy" in rendered
+    assert "FINAL,♻️ 自动选择" in rendered
+    assert "漏网之鱼" not in rendered
+    assert "hijack-dns=*:53" in rendered
+    assert "doh-server" not in rendered
+    assert "geoip-url" not in rendered
+    assert "resource-parser" not in rendered
+    assert "ca-p12" not in rendered
+    assert "[MITM]" not in rendered
+    assert "[Script]" not in rendered
 
 
 @pytest.mark.asyncio
