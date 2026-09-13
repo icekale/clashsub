@@ -121,6 +121,19 @@ def test_public_mode_requires_acknowledgement_and_logs_out(client):
     assert client.get("/api/admin/overview").status_code == 401
 
 
+def test_refresh_interval_change_reschedules_subscription(client):
+    csrf = login(client)
+    current = client.get("/api/admin/settings").json()
+    woke = []
+    client.app.state.services.scheduler.reschedule = lambda: woke.append(True)
+    payload = {**current, "refresh_interval_minutes": 10}
+    assert (
+        client.put("/api/admin/settings", headers={"X-CSRF-Token": csrf}, json=payload).status_code
+        == 200
+    )
+    assert woke == [True]
+
+
 def test_upstream_status_is_redacted(client):
     login(client)
 

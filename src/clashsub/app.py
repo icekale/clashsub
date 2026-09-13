@@ -183,7 +183,9 @@ def create_app(
             lambda: services.refresher.refresh_if_stale(
                 services.runtime_settings.get().refresh_interval_minutes * 60
             ),
-            delay_seconds=lambda: 24 * 3600,
+            delay_seconds=lambda: max(
+                60, services.runtime_settings.get().refresh_interval_minutes * 60
+            ),
         )
         health_scheduler = RefreshScheduler(
             services.integration.run_health,

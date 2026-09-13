@@ -358,6 +358,10 @@ def update_settings(payload: RuntimeSettingsRequest, request: Request):
         services.runtime_settings.update(updated)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    if getattr(services, "scheduler", None) is not None and (
+        current.refresh_interval_minutes != updated.refresh_interval_minutes
+    ):
+        services.scheduler.reschedule()
     if getattr(services, "health_scheduler", None) is not None and (
         current.health_interval_seconds != updated.health_interval_seconds
         or current.health_night_enabled != updated.health_night_enabled
