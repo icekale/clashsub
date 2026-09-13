@@ -35,7 +35,7 @@ async def test_conversion_uses_sub_endpoint_and_sanitizes_disk(tmp_path):
     assert seen == {
         "path": "/sub",
         "url": "https://sub.example.com/raw/plain-secret",
-        "expand": "true",
+        "expand": "false",
     }
     assert "plain-secret" in result
     assert "plain-secret" not in stored

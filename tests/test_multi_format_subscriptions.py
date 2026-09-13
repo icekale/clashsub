@@ -117,7 +117,7 @@ async def test_client_parameters_reach_upstream_and_split_the_cache(tmp_path):
 
 @pytest.mark.asyncio
 async def test_expand_false_reaches_upstream_rule_providers(tmp_path):
-    """expand=false 是 OpenClash rule_provider 开关；白名单要放行它并覆盖默认的 true。"""
+    """expand=false 是 OpenClash rule_provider 开关；白名单要放行它，且默认值本身就是 false。"""
     seen = []
     service = ConverterService(
         CacheFiles(tmp_path),
@@ -130,6 +130,30 @@ async def test_expand_false_reaches_upstream_rule_providers(tmp_path):
     await service.render("00000000-0000-0000-0000-000000000004",
                          "https://sub.example.test/raw/token", "clash", params=params)
     assert seen[0]["params"]["expand"] == "false"
+
+
+@pytest.mark.asyncio
+async def test_default_render_keeps_rule_providers_like_upstream_default(tmp_path):
+    """不传 params 时（面板「默认」）必须和上游不带 expand 一致：保留 rule-providers。"""
+    seen = []
+    service = ConverterService(
+        CacheFiles(tmp_path),
+        "https://converter.example.test",
+        httpx.MockTransport(lambda request: _handler(request, seen)),
+    )
+    await service.render(
+        "00000000-0000-0000-0000-000000000005", "https://sub.example.test/raw/token", "clash"
+    )
+    assert seen[0]["params"]["expand"] == "false"
+
+    # 客户端显式要内联规则时仍然能覆盖。
+    await service.render(
+        "00000000-0000-0000-0000-000000000006",
+        "https://sub.example.test/raw/token",
+        "clash",
+        params={"expand": "true"},
+    )
+    assert seen[1]["params"]["expand"] == "true"
 
 
 @pytest.mark.asyncio

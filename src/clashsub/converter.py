@@ -40,7 +40,9 @@ BOOLEAN_PARAMS = (
     "new_name",
     "append_type",
     # expand=false 让 subconverter 保留 rule-providers/RULE-SET 而不展开成内联规则
-    # （OpenClash 的 rule_provider 开关就是发这个）。默认仍为 true，见 render()。
+    # （OpenClash 的 rule_provider 开关就是发这个）。render() 的默认值也是 false：
+    # 面板上的「默认」= 不传参，必须与上游不带 expand 的行为一致，否则「默认」会
+    # 悄悄变成「开」，与同一行的「OpenClash 建议关」提示打架。
     "expand",
 )
 BOOLEAN_VALUES = {
@@ -460,7 +462,9 @@ class ConverterService:
             template = None
         surge_params = self._surge_node_params(source_digest) if format == "surge" else {}
         try:
-            request_params = {"target": format, "url": raw_url, "expand": "true"}
+            # 默认不展开：上游不带 expand 时就是 false（保留 rule-providers），这里显式
+            # 写出同一个值，让「默认」和上游默认对齐；要内联规则由客户端传 expand=true。
+            request_params = {"target": format, "url": raw_url, "expand": "false"}
             if format == "surge":
                 request_params["ver"] = "4"
             request_params.update(params or {})

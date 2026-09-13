@@ -120,14 +120,16 @@ Unraid 部署要点（appdata 目录、权限、命名卷）以及通过 Lucky �
 以及各自的故障转移变体）；默认即标准版。参数会与 token 一起参与缓存键，
 因此不同参数组各自缓存、互不覆盖；未知参数会被忽略。
 
-OpenClash 用户注意：OpenClash 的“使用规则集（rule_provider）”开关只在它自己
-调用上游转换接口时才发送 `expand=false`。若把订阅地址直接指向 `/clash/<token>`
-并关闭 OpenClash 的订阅转换，必须自己带上 `expand=false`，否则规则会被展开成
-内联 `GEOSITE`/`GEOIP` 而不是 `rule-providers`：
+OpenClash 用户注意：`/clash/<token>` 默认就保留 `rule-providers`（不展开规则），
+与 OpenClash “使用规则集（rule_provider）”开关一致，直接用即可：
 
 ```
-https://<你的域名>/clash/<token>?template=full&expand=false
+https://<你的域名>/clash/<token>?template=full
 ```
+
+要让规则展开成内联 `GEOSITE`/`GEOIP`（例如给不支持 rule-providers 的客户端），
+显式带上 `expand=true`。转换参数在链接上的含义见 WebUI “分享链接”页的勾选项：
+“默认”= 不传参 = 跟随上游默认，与勾选“关”等价（仅对 `expand` 而言）。
 
 “概览”页的“转换服务”卡片显示容器内 SubConverter 的版本、提交与当日/累计的
 订阅请求数、规则转换数、失败与拒绝数（需上游开启 statistics）。转换服务无响应时
