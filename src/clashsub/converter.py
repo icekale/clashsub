@@ -5,7 +5,7 @@ import json
 import re
 import time
 import unicodedata
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import httpx
 import yaml
@@ -69,6 +69,17 @@ TEMPLATES = {
     "full": f"{_AETHER_CFG}/Custom_Clash_Full.ini",
     "full-fallback": f"{_AETHER_CFG}/Custom_Clash_Full_Fallback.ini",
 }
+
+RULE_NAME = re.compile(r"^[A-Za-z0-9_-]+\.(mrs|yaml)$")
+RULE_URL_RE = re.compile(
+    r"https://(?:cdn\.jsdelivr\.net|testingcf\.jsdelivr\.net)"
+    r"/gh/Aethersailor/Custom_OpenClash_Rules@[^\s\"']+/rule/([A-Za-z0-9_.-]+)"
+)
+RULE_TTL = 86400
+RULE_UPSTREAMS = (
+    "https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/",
+    "https://cdn.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/",
+)
 
 
 def client_params(query) -> dict[str, str]:
@@ -155,6 +166,7 @@ class ConverterService:
     ):
         self.cache, self.base_url, self.transport = cache, base_url.rstrip("/"), transport
         self.cache_ttl, self.max_bytes = cache_ttl, max_bytes
+        self.rule_transport = None
 
     def _validate_and_sanitize(
         self, text: str, raw_url: str, format: str, surge_params: dict | None = None
@@ -412,10 +424,50 @@ class ConverterService:
         return has_general and has_proxy
 
     @staticmethod
+    def _rules_base(raw_url: str) -> str:
+        parsed = urlparse(raw_url)
+        if parsed.scheme in ("http", "https") and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}/rules"
+        return ""
+
+    @staticmethod
     def _restore_raw_url(template: str, raw_url: str) -> str:
-        return template.replace(RAW_URL_ENCODED_PLACEHOLDER, quote(raw_url, safe="")).replace(
+        text = template.replace(RAW_URL_ENCODED_PLACEHOLDER, quote(raw_url, safe="")).replace(
             RAW_URL_PLACEHOLDER, raw_url
         )
+        rules_base = ConverterService._rules_base(raw_url)
+        if not rules_base:
+            return text
+        return RULE_URL_RE.sub(lambda match: f"{rules_base}/{match.group(1)}", text)
+
+    async def load_rule(self, name: str) -> bytes:
+        if not RULE_NAME.fullmatch(name):
+            raise ValueError("invalid rule name")
+        path = self.cache.root / "rules" / name
+        try:
+            if path.is_file() and time.time() - path.stat().st_mtime < RULE_TTL:
+                return path.read_bytes()
+        except OSError:
+            pass
+        last_error = None
+        async with httpx.AsyncClient(
+            transport=self.rule_transport, timeout=20, follow_redirects=True
+        ) as client:
+            for base in RULE_UPSTREAMS:
+                try:
+                    response = await client.get(base + name)
+                    response.raise_for_status()
+                    data = response.content
+                    if not data:
+                        continue
+                    self.cache._atomic_write(path, data)
+                    return data
+                except httpx.HTTPError as exc:
+                    last_error = exc
+        try:
+            return path.read_bytes()
+        except OSError as exc:
+            raise FileNotFoundError(name) from (last_error or exc)
 
     @staticmethod
     def _managed_header(format: str, output_raw_url: str, params: dict[str, str] | None = None) -> str:

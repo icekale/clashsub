@@ -417,3 +417,52 @@ async def test_surge_output_keeps_complete_config_sections(tmp_path):
         assert section in rendered
     assert "ws-headers=Host:spoof.example.test" in rendered
     assert 'ws-headers="' not in rendered
+
+
+@pytest.mark.asyncio
+async def test_clash_rule_providers_point_at_local_rules(tmp_path):
+    payload = VALID + (
+        "rule-providers:\n"
+        "  Custom_Proxy_Domain:\n"
+        "    type: http\n"
+        "    url: https://cdn.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Proxy_Domain.mrs\n"
+        "  Custom_Direct_Domain:\n"
+        "    type: http\n"
+        '    url: "https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Direct_Domain.mrs"\n'
+    )
+    service = ConverterService(
+        CacheFiles(tmp_path),
+        "https://api.asailor.org",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
+    )
+    result = await service.render(
+        "00000000-0000-0000-0000-000000000018",
+        "https://sub.example.com/raw/plain-secret",
+        public_raw_url="https://nav.example.test:8096/raw/plain-secret",
+    )
+    assert "jsdelivr.net" not in result
+    assert "https://nav.example.test:8096/rules/Custom_Proxy_Domain.mrs" in result
+    assert "https://nav.example.test:8096/rules/Custom_Direct_Domain.mrs" in result
+    stored = (
+        tmp_path / "converted" / "00000000-0000-0000-0000-000000000018.yaml"
+    ).read_text(encoding="utf-8")
+    assert "cdn.jsdelivr.net" in stored
+
+
+@pytest.mark.asyncio
+async def test_load_rule_fetches_testingcf_and_rejects_bad_names(tmp_path):
+    def handler(request):
+        if "testingcf.jsdelivr.net" in str(request.url) and str(request.url).endswith(
+            "Custom_Proxy_Domain.mrs"
+        ):
+            return httpx.Response(200, content=b"mrs-bytes")
+        return httpx.Response(502)
+
+    service = ConverterService(CacheFiles(tmp_path), "https://api.asailor.org")
+    service.rule_transport = httpx.MockTransport(handler)
+    assert await service.load_rule("Custom_Proxy_Domain.mrs") == b"mrs-bytes"
+    assert (tmp_path / "rules" / "Custom_Proxy_Domain.mrs").read_bytes() == b"mrs-bytes"
+    with pytest.raises(ValueError):
+        await service.load_rule("../passwd.mrs")
+    with pytest.raises(ValueError):
+        await service.load_rule("foo.txt")

@@ -31,6 +31,7 @@ PROTECTED_PREFIXES = (
     "/app",
     "/api",
     "/raw",
+    "/rules",
     *(f"/{kind}" for kind in SHARE_CONVERTED_KINDS),
 )
 

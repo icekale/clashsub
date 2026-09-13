@@ -311,3 +311,22 @@ def test_smart_route_uses_user_agent_and_returns_raw_for_shadowrocket_or_unknown
     assert "http://clashsub:8080/raw/" not in clash.text
     assert unknown.content == b"raw-clash-yaml"
     assert raw_urls == [f"http://clashsub:8080/raw/{token}"] * 6
+
+
+def test_rule_file_is_proxied_and_rejects_bad_names(app_settings):
+    def handler(request):
+        assert "Custom_Proxy_Domain.mrs" in str(request.url)
+        return httpx.Response(200, content=b"mrs-bytes")
+
+    with TestClient(
+        create_app(app_settings, transport=httpx.MockTransport(lambda request: httpx.Response(502))),
+        client=("127.0.0.1", 50000),
+    ) as client:
+        client.app.state.services.converter.rule_transport = httpx.MockTransport(handler)
+        client.app.state.services.runtime_settings.update(
+            RuntimeSettings(lan_base_url="http://testserver")
+        )
+        ok = client.get("/rules/Custom_Proxy_Domain.mrs")
+        assert ok.status_code == 200
+        assert ok.content == b"mrs-bytes"
+        assert client.get("/rules/foo.txt").status_code == 404

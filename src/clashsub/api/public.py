@@ -298,3 +298,17 @@ async def smart_subscription(token: str, request: Request):
         return await _converted_subscription(token, request, "clash")
     _allow_request(request, "share")
     return await _raw_response(request, token, require_clash=True)
+
+
+@router.get("/rules/{name}")
+async def rule_file(name: str, request: Request):
+    _allow_request(request, "share")
+    try:
+        body = await _services(request).converter.load_rule(name)
+    except ValueError:
+        raise HTTPException(404)
+    except FileNotFoundError as exc:
+        logger.warning("rule file unavailable name=%s", name)
+        raise HTTPException(502, "rule file unavailable") from exc
+    media = "application/octet-stream" if name.endswith(".mrs") else "text/yaml; charset=utf-8"
+    return Response(body, media_type=media, headers={"Cache-Control": "public, max-age=3600"})
