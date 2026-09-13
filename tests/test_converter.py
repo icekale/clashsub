@@ -135,8 +135,9 @@ async def test_surge_and_loon_accept_general_and_a_proxy_entry(tmp_path, format)
 async def test_loon_strips_clash_remote_rules(tmp_path):
     payload = (
         "[General]\nloglevel = notify\n"
+        'ssid-trigger="Ccccccc":DIRECT,"cellular":RULE,"default":RULE\n'
         "[Proxy]\nNode = ss, example.test, 443\n"
-        "[Rule]\nGEOIP,CN,DIRECT\nFINAL,Proxy\n"
+        "[Rule]\nGEOSITE,youtube,PROXY\nGEOIP,cn,DIRECT\nGEOIP,telegram,PROXY\nFINAL,Proxy\n"
         "[Remote Rule]\n"
         "https://cdn.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Proxy_Domain.mrs,PROXY\n"
         "https://nav.example.test/rules/Custom_Direct_Domain.mrs,DIRECT\n"
@@ -155,8 +156,12 @@ async def test_loon_strips_clash_remote_rules(tmp_path):
     )
     assert "jsdelivr" not in rendered
     assert "/rules/" not in rendered
+    assert "ssid-trigger" not in rendered
+    assert "GEOSITE" not in rendered
+    assert "GEOIP,cn,DIRECT" not in rendered
+    assert "GEOIP,telegram,PROXY" in rendered
     assert "https://example.com/loon-rules.list,DIRECT" in rendered
-    assert "GEOIP,CN,DIRECT" in rendered
+    assert "FINAL,Proxy" in rendered
 
 
 @pytest.mark.asyncio

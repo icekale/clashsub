@@ -79,6 +79,8 @@ CLASH_REMOTE_RULE = re.compile(
     r"(?:cdn\.jsdelivr\.net|testingcf\.jsdelivr\.net)/gh/Aethersailor/Custom_OpenClash_Rules"
     r"|/rules/[A-Za-z0-9_.-]+\.(?:mrs|yaml)\b"
 )
+# Loon 不认 Clash GEOSITE；国内 DNS 污染后 GEOIP,cn 会把被墙域名直连。
+_LOON_DROP = re.compile(r"(?i)^(?:ssid-trigger\s*=|GEOSITE,|GEOIP,\s*cn,)")
 RULE_TTL = 86400
 RULE_UPSTREAMS = (
     "https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/",
@@ -458,9 +460,11 @@ class ConverterService:
         return RULE_URL_RE.sub(lambda match: f"{rules_base}/{match.group(1)}", text)
 
     @staticmethod
-    def _strip_clash_remote_rules(text: str) -> str:
+    def _sanitize_loon(text: str) -> str:
         return "".join(
-            line for line in text.splitlines(keepends=True) if not CLASH_REMOTE_RULE.search(line)
+            line
+            for line in text.splitlines(keepends=True)
+            if not CLASH_REMOTE_RULE.search(line) and not _LOON_DROP.match(line.lstrip())
         )
 
     async def load_rule(self, name: str) -> bytes:
@@ -553,7 +557,7 @@ class ConverterService:
         if format == "clash":
             return await self._inline_rule_providers(text)
         if format == "loon":
-            return self._strip_clash_remote_rules(text)
+            return self._sanitize_loon(text)
         return text
 
     @staticmethod
