@@ -208,6 +208,8 @@ async def test_loon_node_list_drops_subscription_notice_pseudo_nodes(tmp_path):
     assert "订阅托管" not in rendered
     assert "🇺🇸 美国-实验线路 BGP" in rendered
     assert "🇭🇰 香港节点" in rendered
+    assert rendered.startswith("🇭🇰 香港节点")
+    assert rendered.rstrip().endswith("🇺🇸 美国-实验线路 BGP = vmess,edge.example,443,auto,uuid,transport=ws,path=/,host=cdn.example")
 
 
 @pytest.mark.asyncio
@@ -216,6 +218,7 @@ async def test_loon_filters_subscription_notices_from_existing_list_cache(tmp_pa
     share_id = "00000000-0000-0000-0000-000000000025"
     cache.write_converter_template(
         share_id,
+        "🇺🇸 美国-实验线路 BGP = vmess,edge.example,443,auto,uuid\n"
         "大量节点超时请「更新订阅」 = vmess,edge.example,443,auto,uuid\n"
         "可用节点 = trojan,hk.example,443,password\n",
         "loon",
@@ -228,7 +231,10 @@ async def test_loon_filters_subscription_notices_from_existing_list_cache(tmp_pa
 
     rendered = await service.render(share_id, "https://sub.example/raw/token", "loon")
 
-    assert rendered == "可用节点 = trojan,hk.example,443,password\n"
+    assert rendered == (
+        "可用节点 = trojan,hk.example,443,password\n"
+        "🇺🇸 美国-实验线路 BGP = vmess,edge.example,443,auto,uuid\n"
+    )
 
 
 @pytest.mark.asyncio

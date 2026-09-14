@@ -468,12 +468,14 @@ class ConverterService:
 
     @staticmethod
     def _sanitize_loon_list(text: str) -> str:
-        return "".join(
+        lines = [
             line
             for line in text.splitlines(keepends=True)
             if "=" not in line
             or not any(marker in line.split("=", 1)[0] for marker in LOON_NOTICE_MARKERS)
-        )
+        ]
+        lines.sort(key=lambda line: "=" in line and "实验线路" in line.split("=", 1)[0])
+        return "".join(lines)
 
     @staticmethod
     def _has_valid_loon_list(text: str) -> bool:
