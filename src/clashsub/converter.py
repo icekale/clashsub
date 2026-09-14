@@ -17,6 +17,7 @@ from .cache_files import CacheFiles
 RAW_URL_PLACEHOLDER = "__CLASHSUB_RAW_URL__"
 RAW_URL_ENCODED_PLACEHOLDER = "__CLASHSUB_RAW_URL_ENCODED__"
 COUNTRY_CODE = re.compile(r"^[A-Za-z]{2}$")
+LOON_NOTICE_MARKERS = ("更新订阅", "激活订阅", "订阅托管")
 
 # 可选输出格式（同时也是 /sub 的 target、订阅路由名与分享里的 kind）。
 # stash 未列入：v1.9.4 的默认规则集会被它自己判为 "a Stash ruleset contains an
@@ -211,6 +212,7 @@ class ConverterService:
                     line for line in lines if not line.lstrip().startswith("#!MANAGED-CONFIG")
                 )
             if format == "loon" and loon_list:
+                text = self._sanitize_loon_list(text)
                 if not self._has_valid_loon_list(text):
                     raise ValueError("converter response has no expected provider")
             elif not self._has_valid_proxy_section(text):
@@ -465,6 +467,15 @@ class ConverterService:
         return RULE_URL_RE.sub(lambda match: f"{rules_base}/{match.group(1)}", text)
 
     @staticmethod
+    def _sanitize_loon_list(text: str) -> str:
+        return "".join(
+            line
+            for line in text.splitlines(keepends=True)
+            if "=" not in line
+            or not any(marker in line.split("=", 1)[0] for marker in LOON_NOTICE_MARKERS)
+        )
+
+    @staticmethod
     def _has_valid_loon_list(text: str) -> bool:
         """Loon 的 list 输出是 ``名称 = 类型,主机,端口,...`` 的节点行。"""
         for line in text.splitlines():
@@ -617,6 +628,8 @@ class ConverterService:
         try:
             template = self.cache.read_converter_template(share_id, format, key)
             if format == "loon":
+                if loon_list:
+                    template = self._sanitize_loon_list(template)
                 template_is_valid = (
                     self._has_valid_loon_list(template)
                     if loon_list

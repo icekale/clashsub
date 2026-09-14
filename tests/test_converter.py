@@ -183,11 +183,60 @@ async def test_loon_defaults_to_node_list_and_invalidates_full_config_cache(tmp_
 
 
 @pytest.mark.asyncio
+async def test_loon_node_list_drops_subscription_notice_pseudo_nodes(tmp_path):
+    payload = (
+        "大量节点超时请「更新订阅」 = vmess,edge.example,443,auto,uuid,transport=ws,path=/,host=cdn.example\n"
+        "更新需要在官网「激活订阅」 = vmess,edge.example,443,auto,uuid,transport=ws,path=/,host=cdn.example\n"
+        "禁止使用「订阅托管 / 转换」 = vmess,edge.example,443,auto,uuid,transport=ws,path=/,host=cdn.example\n"
+        "🇺🇸 美国-实验线路 BGP = vmess,edge.example,443,auto,uuid,transport=ws,path=/,host=cdn.example\n"
+        "🇭🇰 香港节点 = trojan,hk.example,443,password,sni=cdn.example\n"
+    )
+    service = ConverterService(
+        CacheFiles(tmp_path),
+        "https://converter.example.test",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=payload)),
+    )
+
+    rendered = await service.render(
+        "00000000-0000-0000-0000-000000000024",
+        "https://sub.example/raw/token",
+        "loon",
+    )
+
+    assert "更新订阅" not in rendered
+    assert "激活订阅" not in rendered
+    assert "订阅托管" not in rendered
+    assert "🇺🇸 美国-实验线路 BGP" in rendered
+    assert "🇭🇰 香港节点" in rendered
+
+
+@pytest.mark.asyncio
+async def test_loon_filters_subscription_notices_from_existing_list_cache(tmp_path):
+    cache = CacheFiles(tmp_path)
+    share_id = "00000000-0000-0000-0000-000000000025"
+    cache.write_converter_template(
+        share_id,
+        "大量节点超时请「更新订阅」 = vmess,edge.example,443,auto,uuid\n"
+        "可用节点 = trojan,hk.example,443,password\n",
+        "loon",
+    )
+    service = ConverterService(
+        cache,
+        "https://converter.example.test",
+        transport=httpx.MockTransport(lambda request: pytest.fail("fresh cache must not refetch")),
+    )
+
+    rendered = await service.render(share_id, "https://sub.example/raw/token", "loon")
+
+    assert rendered == "可用节点 = trojan,hk.example,443,password\n"
+
+
+@pytest.mark.asyncio
 async def test_loon_keeps_full_config_and_node_fields(tmp_path):
     payload = (
         "[General]\nloglevel = notify\n"
-        "[Proxy]\nNode = ss,example.test,443,\"ab, cd\",sni=example.test,tls-profile=compat\n"
-        "[Proxy Group]\nPROXY = select,Node\n"
+        "[Proxy]\n大量节点超时请「更新订阅」 = ss,example.test,443,\"ab, cd\",sni=example.test,tls-profile=compat\n"
+        "[Proxy Group]\nPROXY = select,大量节点超时请「更新订阅」\n"
         "[Rule]\nFINAL,PROXY\n"
         "[Remote Rule]\nhttps://rules.example/loon.list,PROXY\n"
         "[MITM]\nhostname=example.com\n"
@@ -207,6 +256,15 @@ async def test_loon_keeps_full_config_and_node_fields(tmp_path):
     )
 
     assert rendered == payload
+    assert (
+        await service.render(
+            "00000000-0000-0000-0000-000000000020",
+            "https://sub.example/raw/token",
+            "loon",
+            params={"list": "false"},
+        )
+        == payload
+    )
 
 
 @pytest.mark.asyncio
