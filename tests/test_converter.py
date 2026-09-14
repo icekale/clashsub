@@ -122,7 +122,10 @@ async def test_surge_and_loon_accept_general_and_a_proxy_entry(tmp_path, format)
     )
 
     rendered = await service.render(
-        "00000000-0000-0000-0000-000000000004", "https://sub.example/raw/token", format
+        "00000000-0000-0000-0000-000000000004",
+        "https://sub.example/raw/token",
+        format,
+        params={"list": "false"} if format == "loon" else None,
     )
 
     if format == "surge":
@@ -151,6 +154,35 @@ async def test_loon_explicit_list_param_accepts_node_list(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_loon_defaults_to_node_list_and_invalidates_full_config_cache(tmp_path):
+    cache = CacheFiles(tmp_path)
+    share_id = "00000000-0000-0000-0000-000000000023"
+    cache.write_converter_template(
+        share_id,
+        "[General]\nloglevel = notify\n[Proxy]\nOld = ss,old.example,443\n[Rule]\nGEOSITE,private,PROXY\n",
+        "loon",
+    )
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        assert request.url.params["list"] == "true"
+        return httpx.Response(200, text="Current = vmess,current.example,443,auto,uuid,transport=ws,path=/,host=example.com\n")
+
+    service = ConverterService(
+        cache,
+        "https://converter.example.test",
+        transport=httpx.MockTransport(handler),
+    )
+
+    rendered = await service.render(share_id, "https://sub.example/raw/token", "loon")
+
+    assert rendered.startswith("Current = vmess,current.example,443")
+    assert "[General]" not in rendered
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
 async def test_loon_keeps_full_config_and_node_fields(tmp_path):
     payload = (
         "[General]\nloglevel = notify\n"
@@ -171,6 +203,7 @@ async def test_loon_keeps_full_config_and_node_fields(tmp_path):
         "00000000-0000-0000-0000-000000000020",
         "https://sub.example/raw/token",
         "loon",
+        params={"list": "false"},
     )
 
     assert rendered == payload
@@ -246,7 +279,12 @@ async def test_loon_refetches_legacy_list_cache_for_full_config(tmp_path):
         transport=httpx.MockTransport(handler),
     )
 
-    rendered = await service.render(share_id, "https://sub.example/raw/token", "loon")
+    rendered = await service.render(
+        share_id,
+        "https://sub.example/raw/token",
+        "loon",
+        params={"list": "false"},
+    )
 
     assert rendered == payload
     assert len(calls) == 1
@@ -491,7 +529,10 @@ async def test_converter_rejects_proxy_lines_only_output(tmp_path, format):
 
     with pytest.raises(RuntimeError, match="unavailable"):
         await service.render(
-            "00000000-0000-0000-0000-000000000016", "http://clashsub:8080/raw/token", format
+            "00000000-0000-0000-0000-000000000016",
+            "http://clashsub:8080/raw/token",
+            format,
+            params={"list": "false"} if format == "loon" else None,
         )
 
 

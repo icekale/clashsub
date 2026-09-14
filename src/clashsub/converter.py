@@ -469,6 +469,8 @@ class ConverterService:
         """Loon 的 list 输出是 ``名称 = 类型,主机,端口,...`` 的节点行。"""
         for line in text.splitlines():
             stripped = line.strip()
+            if stripped.startswith("[") and stripped.endswith("]"):
+                return False
             if not stripped or stripped.startswith(("#", ";")) or "=" not in stripped:
                 continue
             _, value = stripped.split("=", 1)
@@ -607,8 +609,9 @@ class ConverterService:
         if format not in SUPPORTED_FORMATS:
             raise ValueError("unsupported converter format")
         output_raw_url = public_raw_url or raw_url
-        params = params or {}
-        loon_list = format == "loon" and params.get("list") == "true"
+        params = dict(params or {})
+        # Loon 默认作为节点订阅使用；完整配置里的 OpenClash 规则不兼容 Loon。
+        loon_list = format == "loon" and params.get("list", "true") == "true"
         key = params_key(params)
         template = None
         try:
@@ -637,6 +640,8 @@ class ConverterService:
             # 默认不展开：上游不带 expand 时就是 false（保留 rule-providers），这里显式
             # 写出同一个值，让「默认」和上游默认对齐；要内联规则由客户端传 expand=true。
             request_params = {"target": format, "url": raw_url, "expand": "false"}
+            if format == "loon" and "list" not in params:
+                request_params["list"] = "true"
             if format == "surge":
                 request_params["ver"] = "4"
             request_params.update(params)

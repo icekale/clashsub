@@ -28,6 +28,8 @@ def _body(target: str, raw_url: str) -> str:
         return f"proxy-providers:\n  p:\n    type: http\n    url: {raw_url}\n"
     if target == "singbox":
         return '{"outbounds": [{"type": "vless", "server": "example.test", "server_port": 443}]}'
+    if target == "loon":
+        return "Node = vmess, example.test, 443, auto, uuid, transport=ws, path=/, host=example.test\n"
     if target == "quanx":
         return (
             "[general]\nloglevel = notify\n[server_local]\n"
@@ -63,7 +65,8 @@ async def test_converter_uses_target_and_keeps_format_caches_isolated(tmp_path):
     assert ver_by_target["surge"] == "4"
     assert all(ver_by_target[format] is None for format in CONVERTER_FORMATS if format != "surge")
 
-    assert "[Proxy]" in rendered["surge"] and "[Proxy]" in rendered["loon"]
+    assert "[Proxy]" in rendered["surge"]
+    assert "Node = vmess" in rendered["loon"] and "[General]" not in rendered["loon"]
     assert "[server_local]" in rendered["quanx"] and "[Proxy]" in rendered["surfboard"]
     assert '"server"' in rendered["singbox"]
 
@@ -299,7 +302,8 @@ def test_smart_route_uses_user_agent_and_returns_raw_for_shadowrocket_or_unknown
         unknown = client.get(f"/smart/{token}", headers={"User-Agent": "curl"})
 
     assert "[Proxy]" in surge.text
-    assert "[Proxy]" in loon.text
+    assert "[General]" not in loon.text
+    assert "Node = vmess" in loon.text
     assert "proxy-providers" in clash.text
     # Stash 读 Clash 配置：同一个格式的第二个请求命中缓存，不再打上游。
     assert "proxy-providers" in stash.text
