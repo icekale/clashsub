@@ -472,7 +472,16 @@ class ConverterService:
             line
             for line in text.splitlines(keepends=True)
             if "=" not in line
-            or not any(marker in line.split("=", 1)[0] for marker in LOON_NOTICE_MARKERS)
+            or (
+                line.split("=", 1)[1]
+                .lstrip()
+                .split(",", 1)[0]
+                .strip()
+                .split("+", 1)[0]
+                .lower()
+                != "vmess"
+                and not any(marker in line.split("=", 1)[0] for marker in LOON_NOTICE_MARKERS)
+            )
         ]
         lines.sort(key=lambda line: "=" in line and "实验线路" in line.split("=", 1)[0])
         return "".join(lines)
