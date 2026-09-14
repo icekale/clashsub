@@ -63,6 +63,16 @@ class IntegrationService:
         await self._maybe_auto_refresh(current, summary)
         return summary
 
+    async def _provider_names(self, client: OpenClashClient, preferred: str) -> list[str]:
+        listing = getattr(client, "http_provider_names", None)
+        if listing is None:
+            return [preferred] if preferred else []
+        try:
+            names = await listing(preferred)
+        except OpenClashError:
+            names = []
+        return names or ([preferred] if preferred else [])
+
     async def _health_from_openclash(self, settings: RuntimeSettings) -> HealthSummary | None:
         provider = settings.openclash_provider.strip()
         if not settings.openclash_enabled or not provider:
@@ -70,13 +80,21 @@ class IntegrationService:
         client = self._client(settings)
         if client is None:
             return None
-        try:
-            delays = await client.healthcheck_provider(
-                provider,
-                timeout=max(60.0, settings.health_timeout_seconds * 20),
-            )
-        except OpenClashError as exc:
-            logger.warning("openclash healthcheck failed: %s", exc)
+        names = await self._provider_names(client, provider)
+        delays: dict[str, int] = {}
+        last_error: OpenClashError | None = None
+        for name in names:
+            try:
+                delays.update(
+                    await client.healthcheck_provider(
+                        name,
+                        timeout=max(60.0, settings.health_timeout_seconds * 20),
+                    )
+                )
+            except OpenClashError as exc:
+                last_error = exc
+        if not delays:
+            logger.warning("openclash healthcheck failed: %s", last_error)
             return None
         summary = self.health_checker.record_outbound_delays(delays)
         if summary.total == 0:
@@ -121,14 +139,13 @@ class IntegrationService:
         try:
             client = self._client(settings)
             if client is not None:
-                try:
-                    await client.refresh_provider(settings.openclash_provider.strip())
-                    logger.info(
-                        "openclash provider refreshed provider=%s",
-                        settings.openclash_provider.strip(),
-                    )
-                except OpenClashError as exc:
-                    logger.warning("openclash push failed: %s", exc)
+                names = await self._provider_names(client, settings.openclash_provider.strip())
+                for name in names:
+                    try:
+                        await client.refresh_provider(name)
+                        logger.info("openclash provider refreshed provider=%s", name)
+                    except OpenClashError as exc:
+                        logger.warning("openclash push failed: %s", exc)
             if settings.health_enabled:
                 await self.run_health(settings)
             subscribe = settings.openclash_subscribe_name.strip()
@@ -149,4 +166,10 @@ class IntegrationService:
         client = self._client(settings)
         if client is None:
             raise OpenClashError("openclash api secret is not configured")
-        return await client.refresh_provider(settings.openclash_provider.strip())
+        names = await self._provider_names(client, settings.openclash_provider.strip())
+        if not names:
+            raise OpenClashError("http provider missing")
+        result = {}
+        for name in names:
+            result = await client.refresh_provider(name)
+        return result

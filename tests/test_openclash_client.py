@@ -167,6 +167,51 @@ async def test_invalid_provider_name_rejected():
         await client.refresh_provider("bad/name")
 
 
+@pytest.mark.asyncio
+async def test_http_provider_names_ignores_stale_preferred_and_groups():
+    def handler(request):
+        assert request.url.path == "/providers/proxies"
+        return httpx.Response(
+            200,
+            json={
+                "providers": {
+                    "Provider_7C00FA": {"vehicleType": "HTTP"},
+                    "Provider_988009": {"vehicleType": "Compatible"},
+                    "🚀 手动选择": {"vehicleType": "Compatible"},
+                    "default": {"vehicleType": "Compatible"},
+                }
+            },
+        )
+
+    client = OpenClashClient(
+        "http://192.168.1.1:9090",
+        "secret",
+        transport=httpx.MockTransport(handler),
+    )
+    assert await client.http_provider_names("Provider_988009") == ["Provider_7C00FA"]
+
+
+@pytest.mark.asyncio
+async def test_http_provider_names_keeps_preferred_when_it_is_http():
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "providers": {
+                    "Provider_A": {"vehicleType": "HTTP"},
+                    "Provider_B": {"vehicleType": "HTTP"},
+                }
+            },
+        )
+
+    client = OpenClashClient(
+        "http://192.168.1.1:9090",
+        "secret",
+        transport=httpx.MockTransport(handler),
+    )
+    assert await client.http_provider_names("Provider_B") == ["Provider_B"]
+
+
 class _FakeProc:
     def __init__(self, returncode=0, hang=False):
         self.returncode = returncode

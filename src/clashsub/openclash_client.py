@@ -58,6 +58,21 @@ class OpenClashClient:
     async def version(self) -> dict:
         return await self._request("GET", "/version")
 
+    async def http_provider_names(self, preferred: str = "") -> list[str]:
+        """HTTP 订阅 provider；配置名过期时改用线上实际名字。"""
+        payload = await self._request("GET", "/providers/proxies")
+        providers = payload.get("providers") if isinstance(payload, dict) else None
+        if not isinstance(providers, dict):
+            return []
+        http_names = [
+            name
+            for name, spec in providers.items()
+            if isinstance(spec, dict) and str(spec.get("vehicleType") or "").upper() == "HTTP"
+        ]
+        if preferred and preferred in http_names:
+            return [preferred]
+        return http_names
+
     async def refresh_provider(self, name: str) -> dict:
         # 只允许 URL 安全字符；`.`/`..`/`%`/`\` 会被 httpx 规范化或解码，
         # 可能意外指向别的资源。

@@ -38,6 +38,9 @@ class RecordingClient(OpenClashClient):
         self.calls = calls
         super().__init__("http://192.168.1.1:9090", "secret")
 
+    async def http_provider_names(self, preferred=""):
+        return [preferred] if preferred else []
+
     async def refresh_provider(self, name):
         self.calls.append(name)
         return {"updatedAt": "now"}
@@ -73,6 +76,52 @@ async def test_sync_after_refresh_pushes_provider(tmp_path, monkeypatch):
 
     assert calls == ["Provider_988009"]
     assert fake_health.runs == 0
+
+
+@pytest.mark.asyncio
+async def test_sync_after_refresh_uses_live_http_provider_when_setting_is_stale(tmp_path):
+    db = _db(tmp_path)
+    store = SettingsStore(db)
+    store.update(
+        RuntimeSettings(
+            openclash_enabled=True,
+            openclash_api_url="http://192.168.1.1:9090",
+            openclash_provider="Provider_988009",
+        )
+    )
+    credentials = SecretStore(db, _key_file(tmp_path))
+    credentials.put("openclash_api_secret", "top-secret")
+    calls = []
+
+    def handler(request):
+        calls.append(f"{request.method} {request.url.path}")
+        if request.method == "GET" and request.url.path == "/providers/proxies":
+            return httpx.Response(
+                200,
+                json={
+                    "providers": {
+                        "Provider_7C00FA": {"vehicleType": "HTTP"},
+                        "🚀 手动选择": {"vehicleType": "Compatible"},
+                    }
+                },
+            )
+        if request.url.path.endswith("/cache/smart/flush"):
+            return httpx.Response(204)
+        return httpx.Response(200, json={"updatedAt": "now"})
+
+    class FakeHealth:
+        async def run_once(self, timeout_seconds=None):
+            return HealthSummary(0, 0, None)
+
+    integration = IntegrationService(
+        store,
+        credentials,
+        FakeHealth(),
+        transport=httpx.MockTransport(handler),
+    )
+    await integration.sync_after_refresh()
+    assert "PUT /providers/proxies/Provider_7C00FA" in calls
+    assert "PUT /providers/proxies/Provider_988009" not in calls
 
 
 @pytest.mark.asyncio
