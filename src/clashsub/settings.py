@@ -27,6 +27,7 @@ class RuntimeSettings:
     health_night_start_hour: int = 0
     health_night_end_hour: int = 8
     backup_fail_threshold: int = 3
+    mail_refresh_enabled: bool = False
 
     def validated(self):
         if not 1 <= self.refresh_interval_minutes <= 1440:
@@ -132,6 +133,7 @@ class SettingsStore:
             health_night_start_hour=self._parse_int(values, "health_night_start_hour", 0),
             health_night_end_hour=self._parse_int(values, "health_night_end_hour", 8),
             backup_fail_threshold=self._parse_int(values, "backup_fail_threshold", 3),
+            mail_refresh_enabled=values.get("mail_refresh_enabled", "false") == "true",
         ).validated()
 
     def update(self, settings: RuntimeSettings) -> RuntimeSettings:

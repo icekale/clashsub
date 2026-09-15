@@ -17,6 +17,7 @@ const testingUpstream = ref(false)
 const savingAirportCredentials = ref(false)
 const testingOpenClash = ref(false)
 const savingOpenClashSecret = ref(false)
+const savingMailImapAuth = ref(false)
 const error = ref('')
 const credentialError = ref('')
 const airportCredentialError = ref('')
@@ -26,6 +27,9 @@ const upstreamTestResult = ref(null)
 const openclashTestResult = ref(null)
 const openclashSecret = ref('')
 const openclashSecretConfigured = ref(false)
+const mailImapAuth = ref('')
+const mailImapConfigured = ref(false)
+const mailError = ref('')
 const publicRiskOpen = ref(false)
 const publicRiskChecked = ref(false)
 const publicAcknowledged = ref(false)
@@ -54,6 +58,7 @@ const SETTINGS_DEFAULTS = {
   health_night_start_hour: 0,
   health_night_end_hour: 8,
   backup_fail_threshold: 3,
+  mail_refresh_enabled: false,
 }
 const form = reactive({ ...SETTINGS_DEFAULTS })
 const original = reactive({ ...form })
@@ -106,12 +111,13 @@ function applySettings(payload) {
 async function load() {
   loading.value = true
   try {
-    const [settingsPayload, statusPayload, airportPayload, openclashPayload, backupPayload] = await Promise.all([
+    const [settingsPayload, statusPayload, airportPayload, openclashPayload, backupPayload, mailPayload] = await Promise.all([
       api.request('/api/admin/settings'),
       api.request('/api/admin/upstream/status'),
       api.request('/api/admin/upstream/credentials'),
       api.request('/api/admin/openclash/credentials'),
       api.request('/api/admin/backup-nodes'),
+      api.request('/api/admin/mail/credentials'),
     ])
     applySettings(settingsPayload)
     upstreamStatus.value = statusPayload
@@ -121,6 +127,8 @@ async function load() {
     }
     openclashSecretConfigured.value = Boolean(openclashPayload?.configured)
     openclashSecret.value = ''
+    mailImapConfigured.value = Boolean(mailPayload?.configured)
+    mailImapAuth.value = ''
     applyBackup(backupPayload)
     loaded.value = true
     error.value = ''
@@ -151,6 +159,29 @@ async function saveOpenClashSecret() {
     message.error(requestError.message)
   } finally {
     savingOpenClashSecret.value = false
+  }
+}
+
+async function saveMailImapAuth() {
+  mailError.value = ''
+  if (!mailImapAuth.value.trim()) {
+    mailError.value = '请输入 QQ IMAP 授权码。'
+    return
+  }
+  savingMailImapAuth.value = true
+  try {
+    await api.request('/api/admin/mail/credentials', {
+      method: 'PUT',
+      body: { secret: mailImapAuth.value },
+    })
+    mailImapAuth.value = ''
+    mailImapConfigured.value = true
+    message.success('QQ IMAP 授权码已保存（加密存储）')
+  } catch (requestError) {
+    mailError.value = requestError.message
+    message.error(requestError.message)
+  } finally {
+    savingMailImapAuth.value = false
   }
 }
 
@@ -732,6 +763,31 @@ onMounted(load)
           <span>健康检查发现在线节点比例低于阈值时，自动重新激活并拉取机场订阅，刷新成功后立即推送 OpenClash。</span>
         </div>
         <n-switch v-model:value="form.health_refresh_enabled" aria-label="不可用时自动刷新缓存" />
+      </div>
+
+      <div class="settings-switch-row">
+        <div>
+          <strong>风控邮件立即刷新</strong>
+          <span>每分钟查看 QQ 邮箱；收到 BitzNet「账户被风控」邮件后立刻重新登录并拉取新订阅。需要 IMAP 授权码，默认关闭。</span>
+        </div>
+        <n-switch v-model:value="form.mail_refresh_enabled" aria-label="风控邮件立即刷新" />
+      </div>
+      <n-alert v-if="mailError" type="error" class="section-block">
+        {{ mailError }}
+      </n-alert>
+      <div class="settings-actions">
+        <n-input
+          id="settings-mail-imap-auth"
+          v-model:value="mailImapAuth"
+          type="password"
+          show-password-on="click"
+          :placeholder="mailImapConfigured ? '已配置，输入新授权码后保存' : 'QQ 邮箱 IMAP 授权码'"
+          autocomplete="off"
+          style="max-width: 28rem"
+        />
+        <n-button secondary :loading="savingMailImapAuth" @click="saveMailImapAuth">
+          {{ mailImapConfigured ? '更新授权码' : '保存授权码' }}
+        </n-button>
       </div>
 
       <div class="settings-switch-row">

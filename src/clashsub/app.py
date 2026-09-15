@@ -18,6 +18,7 @@ from .db import Database
 from .events import configure_logging, get_logger
 from .health import NodeHealthChecker
 from .integration import IntegrationService
+from .mail_refresh import LAST_UID_KEY, POLL_SECONDS, SECRET_NAME as MAIL_IMAP_SECRET, MailRefreshWatcher, fetch_imap_headers
 from .scheduler import RefreshScheduler
 from .settings import RuntimeSettings, SettingsStore
 from .secret_store import SecretStore, SecretStoreUnavailable
@@ -55,6 +56,7 @@ class Services:
     transport: object | None = None
     scheduler: object | None = None
     health_scheduler: object | None = None
+    mail_scheduler: object | None = None
 
 
 def build_services(config: Settings, transport=None, resolver=None) -> Services:
@@ -193,18 +195,73 @@ def create_app(
                 time.localtime().tm_hour
             ),
         )
+
+        def _mail_username() -> str:
+            email = services.config.airport_email
+            return email.get_secret_value() if email else ""
+
+        def _mail_auth() -> str:
+            try:
+                return services.credential_store.get(MAIL_IMAP_SECRET) or ""
+            except SecretStoreUnavailable:
+                return ""
+
+        def _load_mail_uid():
+            with services.db.connect() as conn:
+                row = conn.execute(
+                    "SELECT value FROM app_settings WHERE key=?",
+                    (LAST_UID_KEY,),
+                ).fetchone()
+            if row is None or row["value"] in ("", None):
+                return None
+            try:
+                return int(row["value"])
+            except (TypeError, ValueError):
+                return None
+
+        def _store_mail_uid(uid: int) -> None:
+            with services.db.transaction() as conn:
+                conn.execute(
+                    "INSERT INTO app_settings(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (LAST_UID_KEY, str(int(uid))),
+                )
+
+        async def _fetch_mail(after_uid):
+            return await asyncio.to_thread(
+                fetch_imap_headers,
+                _mail_username(),
+                _mail_auth(),
+                after_uid,
+            )
+
+        mail_watcher = MailRefreshWatcher(
+            enabled=lambda: services.runtime_settings.get().mail_refresh_enabled,
+            username=_mail_username,
+            auth=_mail_auth,
+            fetch_messages=_fetch_mail,
+            refresh=services.refresher.refresh,
+            load_uid=_load_mail_uid,
+            store_uid=_store_mail_uid,
+        )
+        mail_scheduler = RefreshScheduler(
+            mail_watcher.poll,
+            delay_seconds=lambda: POLL_SECONDS,
+        )
         services.scheduler = scheduler
         services.health_scheduler = health_scheduler
+        services.mail_scheduler = mail_scheduler
         app.state.services = services
         tasks = []
         if app.state.start_scheduler:
             tasks.append(asyncio.create_task(scheduler.run(), name="subscription-refresh"))
             tasks.append(asyncio.create_task(health_scheduler.run(), name="node-health"))
+            tasks.append(asyncio.create_task(mail_scheduler.run(), name="mail-refresh"))
         try:
             yield
         finally:
             await scheduler.stop()
             await health_scheduler.stop()
+            await mail_scheduler.stop()
             for task in tasks:
                 await task
 
