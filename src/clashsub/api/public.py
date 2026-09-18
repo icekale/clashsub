@@ -70,12 +70,16 @@ def _tailscale_auth_key(services) -> str:
         return ""
 
 
+def _tailscale_exit_node(services) -> str:
+    return services.runtime_settings.get().tailscale_exit_node
+
+
 def _inject_tailscale_document(document, services) -> None:
-    inject_tailscale(document, _tailscale_auth_key(services))
+    inject_tailscale(document, _tailscale_auth_key(services), _tailscale_exit_node(services))
 
 
 def _inject_tailscale_yaml(body: str, services) -> str:
-    if not _tailscale_auth_key(services):
+    if not _tailscale_auth_key(services) or not _tailscale_exit_node(services):
         return body
     try:
         document = yaml.safe_load(body)
@@ -83,7 +87,7 @@ def _inject_tailscale_yaml(body: str, services) -> str:
         return body
     if not isinstance(document, dict):
         return body
-    inject_tailscale(document, _tailscale_auth_key(services))
+    inject_tailscale(document, _tailscale_auth_key(services), _tailscale_exit_node(services))
     return yaml.safe_dump(document, allow_unicode=True, sort_keys=False)
 
 

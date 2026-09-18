@@ -211,8 +211,9 @@ def test_settings_store_round_trip_tailscale(tmp_path: Path):
     db = Database(tmp_path / "state.db")
     db.initialize()
     store = SettingsStore(db)
-    store.update(RuntimeSettings(tailscale_enabled=True))
+    store.update(RuntimeSettings(tailscale_enabled=True, tailscale_exit_node="100.64.0.1"))
     assert store.get().tailscale_enabled is True
+    assert store.get().tailscale_exit_node == "100.64.0.1"
 
 
 def test_integration_settings_persist_roundtrip(tmp_path: Path):
@@ -410,3 +411,16 @@ def test_backup_fail_threshold_default_and_range(tmp_path: Path):
         RuntimeSettings(backup_fail_threshold=0).validated()
     with pytest.raises(ValueError, match="backup fail threshold"):
         RuntimeSettings(backup_fail_threshold=21).validated()
+
+
+def test_tailscale_requires_exit_node_when_enabled(tmp_path: Path):
+    db = Database(tmp_path / "state.db")
+    db.initialize()
+    store = SettingsStore(db)
+    assert store.get().tailscale_exit_node == ""
+    with pytest.raises(ValueError, match="exit node"):
+        RuntimeSettings(tailscale_enabled=True).validated()
+    with pytest.raises(ValueError, match="exit node"):
+        RuntimeSettings(tailscale_enabled=True, tailscale_exit_node="100.64.0.1 extra").validated()
+    store.update(RuntimeSettings(tailscale_enabled=True, tailscale_exit_node=" 100.64.0.1 "))
+    assert store.get().tailscale_exit_node == "100.64.0.1"

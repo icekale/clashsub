@@ -16,11 +16,13 @@ def test_inject_appends_proxy_and_group_member():
         "proxies": [{"name": "hk", "type": "ss"}],
         "proxy-groups": [{"name": "PROXY", "type": "select", "proxies": ["hk", "DIRECT"]}],
     }
-    inject_tailscale(document, "tskey-auth-test")
+    inject_tailscale(document, "tskey-auth-test", "100.64.0.1")
     assert document["proxies"][-1] == {
         "name": PROXY_NAME,
         "type": "tailscale",
         "auth-key": "tskey-auth-test",
+        "exit-node": "100.64.0.1",
+        "exit-node-allow-lan-access": True,
         "udp": True,
     }
     assert PROXY_NAME in document["proxy-groups"][0]["proxies"]
@@ -28,7 +30,14 @@ def test_inject_appends_proxy_and_group_member():
 
 def test_inject_skips_blank_key():
     document = {"proxies": [{"name": "hk", "type": "ss"}]}
-    inject_tailscale(document, "  ")
+    inject_tailscale(document, "  ", "100.64.0.1")
+    assert document["proxies"] == [{"name": "hk", "type": "ss"}]
+
+
+def test_inject_skips_without_exit_node():
+    """没有 exit node 时不能注入，否则选中该节点会完全断网。"""
+    document = {"proxies": [{"name": "hk", "type": "ss"}]}
+    inject_tailscale(document, "tskey-auth-test", "  ")
     assert document["proxies"] == [{"name": "hk", "type": "ss"}]
 
 
@@ -40,7 +49,7 @@ def test_inject_replaces_existing_same_name():
         ],
         "proxy-groups": [{"name": "PROXY", "proxies": [PROXY_NAME, "hk"]}],
     }
-    inject_tailscale(document, "new-key")
+    inject_tailscale(document, "new-key", "100.64.0.2")
     names = [item["name"] for item in document["proxies"]]
     assert names.count(PROXY_NAME) == 1
     assert document["proxies"][-1]["auth-key"] == "new-key"
@@ -106,6 +115,7 @@ def test_tailscale_credentials_and_clash_inject(tmp_path):
                 lan_base_url="http://testserver",
                 converter_enabled=True,
                 tailscale_enabled=True,
+                tailscale_exit_node="100.64.0.1",
             )
         )
         login = client.post("/api/auth/login", json={"username": "user", "password": "pass"})
@@ -125,6 +135,7 @@ def test_tailscale_credentials_and_clash_inject(tmp_path):
     document = yaml.safe_load(clash.content)
     assert document["proxies"][-1]["type"] == "tailscale"
     assert document["proxies"][-1]["auth-key"] == "tskey-auth-test"
+    assert document["proxies"][-1]["exit-node"] == "100.64.0.1"
     assert PROXY_NAME in document["proxy-groups"][0]["proxies"]
     assert "tailscale" not in loon.text.lower()
     ha_doc = yaml.safe_load(ha.content)

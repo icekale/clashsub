@@ -60,6 +60,7 @@ class RuntimeSettingsRequest(BaseModel):
     backup_fail_threshold: int = Field(default=3, ge=1, le=20)
     mail_refresh_enabled: bool = False
     tailscale_enabled: bool = False
+    tailscale_exit_node: str = Field(default="", max_length=253)
     public_acknowledged: bool = False
 
 

@@ -64,6 +64,7 @@ const SETTINGS_DEFAULTS = {
   backup_fail_threshold: 3,
   mail_refresh_enabled: false,
   tailscale_enabled: false,
+  tailscale_exit_node: '',
 }
 const form = reactive({ ...SETTINGS_DEFAULTS })
 const original = reactive({ ...form })
@@ -824,7 +825,7 @@ onMounted(load)
       <div class="settings-switch-row">
         <div>
           <strong>Clash 订阅加入 Tailscale 节点</strong>
-          <span>在 /clash 和 OpenClash 用的 YAML 里追加可选节点 Tailscale（type: tailscale）。不改规则；需要 Mihomo，第一次连接超时正常。默认关闭。</span>
+          <span>在 /clash 和 OpenClash 用的 YAML 里追加可选节点 Tailscale（type: tailscale）。必须填 exit node，否则这个出站到不了公网。不改规则；需要 Mihomo。默认关闭。</span>
         </div>
         <n-switch v-model:value="form.tailscale_enabled" aria-label="Clash 订阅加入 Tailscale 节点" />
       </div>
@@ -832,6 +833,13 @@ onMounted(load)
         {{ tailscaleError }}
       </n-alert>
       <div class="settings-actions">
+        <n-input
+          id="settings-tailscale-exit-node"
+          v-model:value="form.tailscale_exit_node"
+          placeholder="Tailscale exit node（100.x.x.x 或设备名）"
+          autocomplete="off"
+          style="max-width: 28rem"
+        />
         <n-input
           id="settings-tailscale-auth"
           v-model:value="tailscaleAuth"

@@ -61,6 +61,7 @@ const loadedSettings = {
   backup_fail_threshold: 3,
   mail_refresh_enabled: false,
   tailscale_enabled: false,
+  tailscale_exit_node: '',
 }
 
 const loadedUpstreamStatus = {

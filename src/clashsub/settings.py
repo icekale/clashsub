@@ -29,6 +29,7 @@ class RuntimeSettings:
     backup_fail_threshold: int = 3
     mail_refresh_enabled: bool = False
     tailscale_enabled: bool = False
+    tailscale_exit_node: str = ""
 
     def validated(self):
         if not 1 <= self.refresh_interval_minutes <= 1440:
@@ -57,6 +58,12 @@ class RuntimeSettings:
             ):
                 raise ValueError("invalid OpenClash subscribe name")
             object.__setattr__(self, "openclash_subscribe_name", subscribe)
+        exit_node = self.tailscale_exit_node.strip()
+        if exit_node and not all(character.isalnum() or character in ".-_:" for character in exit_node):
+            raise ValueError("invalid Tailscale exit node address")
+        object.__setattr__(self, "tailscale_exit_node", exit_node)
+        if self.tailscale_enabled and not exit_node:
+            raise ValueError("Tailscale exit node is required, otherwise the node cannot reach the internet")
         if not 30 <= self.health_interval_seconds <= 86400:
             raise ValueError("health check interval must be between 30 and 86400 seconds")
         if not 1 <= self.health_timeout_seconds <= 30:
@@ -136,6 +143,7 @@ class SettingsStore:
             backup_fail_threshold=self._parse_int(values, "backup_fail_threshold", 3),
             mail_refresh_enabled=values.get("mail_refresh_enabled", "false") == "true",
             tailscale_enabled=values.get("tailscale_enabled", "false") == "true",
+            tailscale_exit_node=values.get("tailscale_exit_node", ""),
         ).validated()
 
     def update(self, settings: RuntimeSettings) -> RuntimeSettings:
