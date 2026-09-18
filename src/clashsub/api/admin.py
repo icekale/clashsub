@@ -14,6 +14,7 @@ from ..converter import client_params
 from ..events import get_logger
 from ..integration import OPENCLASH_SECRET_NAME
 from ..mail_refresh import SECRET_NAME as MAIL_IMAP_SECRET
+from ..tailscale_proxy import SECRET_NAME as TAILSCALE_SECRET
 from ..subscription import InvalidSubscription, parse_subscription_userinfo
 from ..openclash_client import OpenClashClient, OpenClashError
 from ..secret_store import SecretStoreUnavailable
@@ -58,6 +59,7 @@ class RuntimeSettingsRequest(BaseModel):
     health_night_end_hour: int = Field(default=8, ge=0, le=23)
     backup_fail_threshold: int = Field(default=3, ge=1, le=20)
     mail_refresh_enabled: bool = False
+    tailscale_enabled: bool = False
     public_acknowledged: bool = False
 
 
@@ -66,6 +68,10 @@ class OpenClashCredentialsRequest(BaseModel):
 
 
 class MailCredentialsRequest(BaseModel):
+    secret: str = Field(min_length=1, max_length=256)
+
+
+class TailscaleCredentialsRequest(BaseModel):
     secret: str = Field(min_length=1, max_length=256)
 
 
@@ -509,6 +515,29 @@ def update_mail_credentials(payload: MailCredentialsRequest, request: Request):
     except SecretStoreUnavailable as exc:
         raise HTTPException(503, "secret store unavailable") from exc
     logger.info("qq imap auth updated")
+    return {"configured": True}
+
+
+@router.get("/tailscale/credentials")
+def get_tailscale_credentials(request: Request):
+    require_admin(request)
+    services = _services(request)
+    try:
+        configured = services.credential_store.get(TAILSCALE_SECRET) is not None
+    except SecretStoreUnavailable:
+        configured = False
+    return {"configured": configured}
+
+
+@router.put("/tailscale/credentials")
+def update_tailscale_credentials(payload: TailscaleCredentialsRequest, request: Request):
+    require_admin(request, require_csrf=True)
+    services = _services(request)
+    try:
+        services.credential_store.put(TAILSCALE_SECRET, payload.secret)
+    except SecretStoreUnavailable as exc:
+        raise HTTPException(503, "secret store unavailable") from exc
+    logger.info("tailscale auth-key updated")
     return {"configured": True}
 
 

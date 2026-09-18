@@ -60,6 +60,7 @@ const loadedSettings = {
   health_night_end_hour: 8,
   backup_fail_threshold: 3,
   mail_refresh_enabled: false,
+  tailscale_enabled: false,
 }
 
 const loadedUpstreamStatus = {
@@ -82,6 +83,7 @@ function mockInitialLoad(status = loadedUpstreamStatus) {
     .mockResolvedValueOnce(loadedAirportCredentials)
     .mockResolvedValueOnce({ configured: false })
     .mockResolvedValueOnce({ configured: false, node_count: 0, nodes: '', management_available: true })
+    .mockResolvedValueOnce({ configured: false })
     .mockResolvedValueOnce({ configured: false })
 }
 
@@ -146,7 +148,7 @@ describe('Settings', () => {
     await buttonWithText(wrapper, '保存运行设置').trigger('click')
     await flushPromises()
 
-    expect(api.request).toHaveBeenNthCalledWith(7, '/api/admin/settings', {
+    expect(api.request).toHaveBeenNthCalledWith(8, '/api/admin/settings', {
       method: 'PUT',
       body: {
         ...loadedSettings,
@@ -194,13 +196,13 @@ describe('Settings', () => {
     await confirmation.setValue('does-not-match')
     await wrapper.get('.credentials-form-grid').trigger('submit')
     expect(wrapper.text()).toContain('两次输入的新密码不一致')
-    expect(api.request).toHaveBeenCalledTimes(6)
+    expect(api.request).toHaveBeenCalledTimes(7)
 
     await confirmation.setValue('next-secret')
     await wrapper.get('.credentials-form-grid').trigger('submit')
     await flushPromises()
 
-    expect(api.request).toHaveBeenNthCalledWith(7, '/api/auth/credentials', {
+    expect(api.request).toHaveBeenNthCalledWith(8, '/api/auth/credentials', {
       method: 'PUT',
       body: {
         current_password: 'current-secret',
@@ -262,7 +264,7 @@ describe('Settings', () => {
     await wrapper.get('form.credentials-form-grid').trigger('submit')
     await flushPromises()
 
-    expect(api.request).toHaveBeenNthCalledWith(7, '/api/auth/credentials', {
+    expect(api.request).toHaveBeenNthCalledWith(8, '/api/auth/credentials', {
       method: 'PUT',
       body: {
         current_password: 'current-secret',
@@ -292,6 +294,7 @@ describe('Settings', () => {
       .mockResolvedValueOnce({ configured: false })
       .mockResolvedValueOnce({ configured: false, node_count: 0, nodes: '', management_available: true })
       .mockResolvedValueOnce({ configured: false })
+      .mockResolvedValueOnce({ configured: false })
       .mockResolvedValueOnce({ ok: true, error_category: null, expires_at: 1_900_000_000 })
 
     const wrapper = mountSettings()
@@ -307,6 +310,7 @@ describe('Settings', () => {
       ['/api/admin/openclash/credentials'],
       ['/api/admin/backup-nodes'],
       ['/api/admin/mail/credentials'],
+      ['/api/admin/tailscale/credentials'],
     ])
     expect(wrapper.text()).toContain('机场订阅源')
     expect(wrapper.text()).toContain('https://panel.example.test/api/v1')
@@ -358,7 +362,7 @@ describe('Settings', () => {
     const testButton = buttonWithText(wrapper, '测试机场连接')
     expect(wrapper.text()).toContain('协议配置不完整')
     expect(testButton.attributes('disabled')).toBeDefined()
-    expect(api.request).toHaveBeenCalledTimes(6)
+    expect(api.request).toHaveBeenCalledTimes(7)
   })
 
   it('loads airport credentials without prefilling the password and saves a validated candidate', async () => {
@@ -368,6 +372,7 @@ describe('Settings', () => {
       .mockResolvedValueOnce({ username: 'member@example.test', password_configured: true })
       .mockResolvedValueOnce({ configured: false })
       .mockResolvedValueOnce({ configured: false, node_count: 0, nodes: '', management_available: true })
+      .mockResolvedValueOnce({ configured: false })
       .mockResolvedValueOnce({ configured: false })
       .mockResolvedValueOnce({ ok: true, node_count: 49, error_category: null })
     const wrapper = mountSettingsWithNaive()
@@ -380,7 +385,7 @@ describe('Settings', () => {
     await wrapper.get('form.airport-credentials-form').trigger('submit')
     await flushPromises()
 
-    expect(api.request).toHaveBeenNthCalledWith(7, '/api/admin/upstream/credentials', {
+    expect(api.request).toHaveBeenNthCalledWith(8, '/api/admin/upstream/credentials', {
       method: 'PUT',
       body: { username: 'updated@example.test', password: 'candidate-password' },
     })
@@ -455,6 +460,7 @@ describe('Settings', () => {
         nodes: 'trojan://bak@node.example:443#bak',
         management_available: true,
       })
+      .mockResolvedValueOnce({ configured: false })
       .mockResolvedValueOnce({ configured: false })
     const wrapper = mountSettings()
     await flushPromises()

@@ -18,6 +18,7 @@ const savingAirportCredentials = ref(false)
 const testingOpenClash = ref(false)
 const savingOpenClashSecret = ref(false)
 const savingMailImapAuth = ref(false)
+const savingTailscaleAuth = ref(false)
 const error = ref('')
 const credentialError = ref('')
 const airportCredentialError = ref('')
@@ -30,6 +31,9 @@ const openclashSecretConfigured = ref(false)
 const mailImapAuth = ref('')
 const mailImapConfigured = ref(false)
 const mailError = ref('')
+const tailscaleAuth = ref('')
+const tailscaleConfigured = ref(false)
+const tailscaleError = ref('')
 const publicRiskOpen = ref(false)
 const publicRiskChecked = ref(false)
 const publicAcknowledged = ref(false)
@@ -59,6 +63,7 @@ const SETTINGS_DEFAULTS = {
   health_night_end_hour: 8,
   backup_fail_threshold: 3,
   mail_refresh_enabled: false,
+  tailscale_enabled: false,
 }
 const form = reactive({ ...SETTINGS_DEFAULTS })
 const original = reactive({ ...form })
@@ -111,13 +116,14 @@ function applySettings(payload) {
 async function load() {
   loading.value = true
   try {
-    const [settingsPayload, statusPayload, airportPayload, openclashPayload, backupPayload, mailPayload] = await Promise.all([
+    const [settingsPayload, statusPayload, airportPayload, openclashPayload, backupPayload, mailPayload, tailscalePayload] = await Promise.all([
       api.request('/api/admin/settings'),
       api.request('/api/admin/upstream/status'),
       api.request('/api/admin/upstream/credentials'),
       api.request('/api/admin/openclash/credentials'),
       api.request('/api/admin/backup-nodes'),
       api.request('/api/admin/mail/credentials'),
+      api.request('/api/admin/tailscale/credentials'),
     ])
     applySettings(settingsPayload)
     upstreamStatus.value = statusPayload
@@ -129,6 +135,8 @@ async function load() {
     openclashSecret.value = ''
     mailImapConfigured.value = Boolean(mailPayload?.configured)
     mailImapAuth.value = ''
+    tailscaleConfigured.value = Boolean(tailscalePayload?.configured)
+    tailscaleAuth.value = ''
     applyBackup(backupPayload)
     loaded.value = true
     error.value = ''
@@ -182,6 +190,29 @@ async function saveMailImapAuth() {
     message.error(requestError.message)
   } finally {
     savingMailImapAuth.value = false
+  }
+}
+
+async function saveTailscaleAuth() {
+  tailscaleError.value = ''
+  if (!tailscaleAuth.value.trim()) {
+    tailscaleError.value = '请输入 Tailscale auth-key。'
+    return
+  }
+  savingTailscaleAuth.value = true
+  try {
+    await api.request('/api/admin/tailscale/credentials', {
+      method: 'PUT',
+      body: { secret: tailscaleAuth.value },
+    })
+    tailscaleAuth.value = ''
+    tailscaleConfigured.value = true
+    message.success('Tailscale auth-key 已保存（加密存储）')
+  } catch (requestError) {
+    tailscaleError.value = requestError.message
+    message.error(requestError.message)
+  } finally {
+    savingTailscaleAuth.value = false
   }
 }
 
@@ -787,6 +818,31 @@ onMounted(load)
         />
         <n-button secondary :loading="savingMailImapAuth" @click="saveMailImapAuth">
           {{ mailImapConfigured ? '更新授权码' : '保存授权码' }}
+        </n-button>
+      </div>
+
+      <div class="settings-switch-row">
+        <div>
+          <strong>Clash 订阅加入 Tailscale 节点</strong>
+          <span>在 /clash 和 OpenClash 用的 YAML 里追加可选节点 Tailscale（type: tailscale）。不改规则；需要 Mihomo，第一次连接超时正常。默认关闭。</span>
+        </div>
+        <n-switch v-model:value="form.tailscale_enabled" aria-label="Clash 订阅加入 Tailscale 节点" />
+      </div>
+      <n-alert v-if="tailscaleError" type="error" class="section-block">
+        {{ tailscaleError }}
+      </n-alert>
+      <div class="settings-actions">
+        <n-input
+          id="settings-tailscale-auth"
+          v-model:value="tailscaleAuth"
+          type="password"
+          show-password-on="click"
+          :placeholder="tailscaleConfigured ? '已配置，输入新 auth-key 后保存' : 'Tailscale auth-key'"
+          autocomplete="off"
+          style="max-width: 28rem"
+        />
+        <n-button secondary :loading="savingTailscaleAuth" @click="saveTailscaleAuth">
+          {{ tailscaleConfigured ? '更新 auth-key' : '保存 auth-key' }}
         </n-button>
       </div>
 

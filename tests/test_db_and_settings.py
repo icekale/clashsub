@@ -170,6 +170,7 @@ def test_health_refresh_settings_defaults(tmp_path: Path):
     assert settings.health_refresh_online_ratio == 0.5
     assert settings.health_refresh_cooldown_minutes == 10
     assert settings.mail_refresh_enabled is False
+    assert settings.tailscale_enabled is False
 
 
 def test_health_refresh_settings_validation():
@@ -204,6 +205,14 @@ def test_settings_store_round_trip_mail_refresh(tmp_path: Path):
     store = SettingsStore(db)
     store.update(RuntimeSettings(mail_refresh_enabled=True))
     assert store.get().mail_refresh_enabled is True
+
+
+def test_settings_store_round_trip_tailscale(tmp_path: Path):
+    db = Database(tmp_path / "state.db")
+    db.initialize()
+    store = SettingsStore(db)
+    store.update(RuntimeSettings(tailscale_enabled=True))
+    assert store.get().tailscale_enabled is True
 
 
 def test_integration_settings_persist_roundtrip(tmp_path: Path):

@@ -8,6 +8,8 @@ from fastapi import APIRouter, HTTPException, Request, Response
 
 from ..converter import client_params
 from ..events import get_logger
+from ..secret_store import SecretStoreUnavailable
+from ..tailscale_proxy import SECRET_NAME as TAILSCALE_SECRET, inject_tailscale
 
 
 router = APIRouter()
@@ -57,6 +59,32 @@ def _rewrite_proxy_groups(document: dict, proxies: list) -> None:
         members = group.get("proxies") if isinstance(group, dict) else None
         if isinstance(members, list):
             group["proxies"] = [name for name in members if str(name).strip() in keep]
+
+
+def _tailscale_auth_key(services) -> str:
+    if not services.runtime_settings.get().tailscale_enabled:
+        return ""
+    try:
+        return services.credential_store.get(TAILSCALE_SECRET) or ""
+    except SecretStoreUnavailable:
+        return ""
+
+
+def _inject_tailscale_document(document, services) -> None:
+    inject_tailscale(document, _tailscale_auth_key(services))
+
+
+def _inject_tailscale_yaml(body: str, services) -> str:
+    if not _tailscale_auth_key(services):
+        return body
+    try:
+        document = yaml.safe_load(body)
+    except (yaml.YAMLError, RecursionError, AttributeError):
+        return body
+    if not isinstance(document, dict):
+        return body
+    inject_tailscale(document, _tailscale_auth_key(services))
+    return yaml.safe_dump(document, allow_unicode=True, sort_keys=False)
 
 
 def _is_loopback(address: str) -> bool:
@@ -188,6 +216,7 @@ async def ha_subscription(token: str, request: Request):
     ]
     document["proxies"] = filtered
     _rewrite_proxy_groups(document, filtered)
+    _inject_tailscale_document(document, services)
     body = await asyncio.to_thread(yaml.safe_dump, document, allow_unicode=True, sort_keys=False)
     headers = {
         **_cache_headers(snapshot, settings.refresh_interval_minutes),
@@ -241,6 +270,8 @@ async def _converted_subscription(token: str, request: Request, format: str):
     except RuntimeError as exc:
         logger.warning("converter unavailable format=%s", format)
         raise HTTPException(503, "converter unavailable") from exc
+    if format == "clash":
+        body = _inject_tailscale_yaml(body, services)
     return Response(
         body,
         media_type=_MEDIA_TYPES.get(format, "text/plain; charset=utf-8"),
