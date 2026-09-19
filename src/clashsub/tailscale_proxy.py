@@ -1,5 +1,7 @@
 PROXY_NAME = "Tailscale"
 SECRET_NAME = "tailscale_auth_key"
+# 固定设备名：state-dir 丢了也只会在 console 里多出同名条目，一眼能认出是订阅发的。
+HOSTNAME = "clashsub"
 
 
 def inject_tailscale(document: dict, auth_key: str, exit_node: str = "") -> None:
@@ -14,6 +16,7 @@ def inject_tailscale(document: dict, auth_key: str, exit_node: str = "") -> None
     proxy = {
         "name": PROXY_NAME,
         "type": "tailscale",
+        "hostname": HOSTNAME,
         "auth-key": key,
         "exit-node": node,
         "exit-node-allow-lan-access": True,

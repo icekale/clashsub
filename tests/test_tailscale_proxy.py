@@ -8,7 +8,7 @@ from pydantic import SecretStr
 from clashsub.app import create_app
 from clashsub.config import Settings
 from clashsub.settings import RuntimeSettings
-from clashsub.tailscale_proxy import PROXY_NAME, SECRET_NAME, inject_tailscale
+from clashsub.tailscale_proxy import HOSTNAME, PROXY_NAME, SECRET_NAME, inject_tailscale
 
 
 def test_inject_appends_proxy_and_group_member():
@@ -20,6 +20,7 @@ def test_inject_appends_proxy_and_group_member():
     assert document["proxies"][-1] == {
         "name": PROXY_NAME,
         "type": "tailscale",
+        "hostname": HOSTNAME,
         "auth-key": "tskey-auth-test",
         "exit-node": "100.64.0.1",
         "exit-node-allow-lan-access": True,
