@@ -4,7 +4,7 @@ services:
     image: clashsub:local
     restart: unless-stopped
     ports:
-      - "18080:8080"
+      - "${CLASHSUB_PORT:-18080}:8080"
     environment:
       DATA_DIR: /data
       TZ: Asia/Shanghai
